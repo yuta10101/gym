@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111111">
+<title>GYM</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: #111; color: #f0f0f0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    min-height: 100%; max-width: 480px; margin: 0 auto;
+    padding: 0 16px;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0 12px; }
+  .logo { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #e8ff47; }
+  .date-row { color: #777; font-size: 13px; margin-bottom: 24px; }
+  .card { background: #1c1c1c; border-radius: 16px; padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+  .suggest-label { color: #777; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+  .day-big { font-size: 40px; font-weight: 900; color: #e8ff47; line-height: 1; }
+  .last-info { color: #666; font-size: 12px; }
+  .primary-btn { background: #e8ff47; color: #111; border: none; border-radius: 10px; padding: 14px 0; font-weight: 800; font-size: 16px; cursor: pointer; letter-spacing: 1px; width: 100%; }
+  .secondary-btn { background: transparent; color: #888; border: 1px solid #333; border-radius: 10px; padding: 12px 0; font-size: 14px; cursor: pointer; width: 100%; }
+  .ghost-btn { background: transparent; color: #888; border: none; font-size: 13px; cursor: pointer; padding: 4px; }
+  .icon-btn { background: #222; border: none; border-radius: 8px; width: 36px; height: 36px; font-size: 16px; cursor: pointer; }
+  .header-btns { display: flex; gap: 8px; }
+  .ex-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .ex-name { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: #fff; }
+  .prev-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .prev-chip { background: #2a2a2a; color: #aaa; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .set-num { color: #555; font-size: 11px; width: 36px; flex-shrink: 0; }
+  .num-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 16px; padding: 8px 10px; width: 72px; text-align: center; outline: none; }
+  .x-mark { color: #555; }
+  .del-btn { background: #2a0000; color: #f66; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 16px; }
+  .add-set-btn { background: transparent; color: #e8ff47; border: 1px solid #333; border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; margin-top: 4px; }
+  /* extra fields */
+  .extra-fields { margin-bottom: 10px; }
+  .extra-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .extra-label { color: #666; font-size: 11px; width: 110px; flex-shrink: 0; }
+  .extra-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; padding: 6px 10px; width: 80px; text-align: center; outline: none; }
+  .extra-unit { color: #555; font-size: 11px; }
+  /* cardio */
+  .cardio-section { margin-bottom: 12px; }
+  .cardio-label { color: #777; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
+  .cardio-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+  .cardio-name { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .cardio-prev { color: #666; font-size: 12px; margin-bottom: 10px; }
+  .cardio-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .cardio-field { display: flex; flex-direction: column; gap: 4px; }
+  .cardio-field-label { color: #666; font-size: 10px; letter-spacing: 1px; }
+  .cardio-field-row { display: flex; align-items: center; gap: 4px; }
+  .min-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 16px; font-weight: 700; padding: 8px 6px; width: 100%; text-align: center; outline: none; }
+  .min-label { color: #555; font-size: 11px; white-space: nowrap; }
+  .session-body { overflow-y: auto; padding-bottom: 100px; }
+  .bottom-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; padding: 12px 16px 32px; background: linear-gradient(transparent, #111 40%); }
+  .finish-btn { width: 100%; background: #e8ff47; color: #111; border: none; border-radius: 12px; padding: 16px 0; font-weight: 800; font-size: 17px; cursor: pointer; }
+  .done-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 24px; }
+  .done-emoji { font-size: 64px; }
+  .done-text { font-size: 28px; font-weight: 700; color: #e8ff47; }
+  /* history */
+  .hist-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+  .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .hist-date { color: #fff; font-weight: 700; }
+  .hist-type { background: #2a2a2a; color: #e8ff47; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .hist-cardio { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .hist-cardio-chip { background: #1e2a1e; color: #7ddf7d; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .ai-btn { background: transparent; color: #7eb8ff; border: 1px solid #2a3a50; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; margin-top: 10px; width: 100%; }
+  .ai-comment-box { background: #0d1a2a; border: 1px solid #2a3a50; border-radius: 10px; padding: 14px; margin-top: 10px; color: #b8d4f8; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+  .ai-loading { color: #555; font-size: 12px; text-align: center; padding: 12px; }
+  /* settings */
+  .section-title { color: #e8ff47; font-weight: 700; font-size: 13px; letter-spacing: 2px; margin-bottom: 10px; margin-top: 8px; }
+  .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .setting-name { flex: 1; color: #ddd; }
+  .scroll-body { overflow-y: auto; padding-bottom: 24px; }
+  .page { display: flex; flex-direction: column; min-height: 100vh; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .rename-input { background: #222; border: 1px solid #555; border-radius: 8px; color: #fff; font-size: 14px; padding: 6px 10px; flex: 1; outline: none; }
+  .empty-msg { color: #555; text-align: center; padding: 48px 0; font-size: 14px; }
+  .divider { border: none; border-top: 1px solid #222; margin: 16px 0; }
+</style>
+</head>
+<body>
+<div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#555">読み込み中...</div></div>
+<script>
+'use strict';
+
+var STORAGE_KEY = 'gym_tracker_v4';
+
+// Extra fields per exercise id
+var EXTRA_FIELDS = {
+  'bench':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
+  'squat':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
+  'incline': [{ key: 'seatHeight', label: '椅子の高さ', unit: '' }],
+};
+
+var DEFAULT_MENUS = {
+  upper: [
+    { id: 'bench',   name: 'ベンチプレス' },
+    { id: 'lat',     name: 'ラッドプルダウン' },
+    { id: 'incline', name: 'アイソラテラルインクラインプレス' },
+  ],
+  lower: [
+    { id: 'squat',  name: 'スクワット' },
+    { id: 'abduct', name: 'ヒップアブダクター' },
+    { id: 'adduct', name: 'ヒップアダクター' },
+    { id: 'curl',   name: 'レッグカール' },
+    { id: 'ext',    name: 'レッグエクステンション' },
+    { id: 'press',  name: 'レッグプレス' },
+  ],
+  cardio: [
+    { id: 'bike',      name: 'エアロバイク' },
+    { id: 'treadmill', name: 'トレッドミル' },
+  ],
+};
+
+var memStore = {};
+function storageGet(k) { try { return localStorage.getItem(k); } catch(e) { return memStore[k]||null; } }
+function storageSet(k,v) { try { localStorage.setItem(k,v); } catch(e) { memStore[k]=v; } }
+function loadData() { try { var r=storageGet(STORAGE_KEY); return r?JSON.parse(r):null; } catch(e){return null;} }
+function saveData() { try { storageSet(STORAGE_KEY, JSON.stringify(state.data)); } catch(e){} }
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+
+var state = {
+  screen: 'home',
+  data: null,
+  session: null,
+  editingEx: null,
+  addMode: null,
+  addText: '',
+  editName: '',
+};
+
+function setState(patch) {
+  var keys = Object.keys(patch);
+  for (var i=0;i<keys.length;i++) state[keys[i]]=patch[keys[i]];
+  render();
+}
+
+function today() { return new Date().toISOString().slice(0,10); }
+function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1)+'/'+dt.getDate(); }
+function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
+
+function startSession(type) {
+  var hist = state.data.history;
+  var exercises = state.data.menus[type].map(function(ex) {
+    var prevEntry=null;
+    for(var i=hist.length-1;i>=0;i--){ if(hist[i].type===type){prevEntry=hist[i];break;} }
+    var prevEx = prevEntry ? (prevEntry.exercises||[]).filter(function(e){return e.id===ex.id;})[0] : null;
+    var extras = {};
+    if (EXTRA_FIELDS[ex.id]) {
+      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = prevEx && prevEx.extras ? (prevEx.extras[f.key]||'') : ''; });
+    }
+    return { id:ex.id, name:ex.name, prev: prevEx?prevEx.sets:null, prevExtras: prevEx?prevEx.extras:null, sets:[{kg:'',reps:''}], extras:extras };
+  });
+  var cardio = state.data.menus.cardio.map(function(c) {
+    var prevMins=null, prevLoad=null, prevDist=null;
+    for(var i=hist.length-1;i>=0;i--){
+      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;break;} }
+    }
+    return { id:c.id, name:c.name, prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, mins:'', load:'', dist:'' };
+  });
+  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio } });
+}
+
+function finishSession() {
+  var entry = {
+    date: today(),
+    type: state.session.type,
+    exercises: state.session.exercises.map(function(ex){
+      return { id:ex.id, name:ex.name, sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}), extras:ex.extras };
+    }),
+    cardio: state.session.cardio.filter(function(c){return c.mins!==''||c.load!==''||c.dist!=='';}).map(function(c){
+      return { id:c.id, name:c.name, mins:c.mins, load:c.load, dist:c.dist };
+    }),
+    aiComment: null,
+  };
+  state.data.history.push(entry);
+  saveData();
+  setState({ screen:'done', session:null });
+}
+
+function updateSet(ei,si,field,val){ state.session.exercises[ei].sets[si][field]=val; }
+function addSet(ei){ state.session.exercises[ei].sets.push({kg:'',reps:''}); render(); }
+function removeSet(ei,si){ var s=state.session.exercises[ei].sets; if(s.length>1){s.splice(si,1);render();} }
+function updateExtra(ei,key,val){ state.session.exercises[ei].extras[key]=val; }
+function updateCardio(ci,field,val){ state.session.cardio[ci][field]=val; }
+function deleteEx(type,idx){ state.data.menus[type].splice(idx,1); saveData(); render(); }
+function renameEx(type,idx){ var name=state.editName.trim(); if(name)state.data.menus[type][idx].name=name; saveData(); setState({editingEx:null,editName:''}); }
+function addEx(type){ var name=state.addText.trim(); if(!name)return; state.data.menus[type].push({id:'ex_'+Date.now(),name:name}); saveData(); setState({addMode:null,addText:''}); }
+
+// AI comment
+function requestAIComment(histIdx) {
+  var entry = state.data.history[histIdx];
+  if (entry.aiComment && entry.aiComment !== 'loading') return;
+
+  state.data.history[histIdx].aiComment = 'loading';
+  saveData();
+  render();
+
+  var hist = state.data.history;
+  // find previous same-type entry
+  var prevEntry = null;
+  for (var i = histIdx-1; i >= 0; i--) {
+    if (hist[i].type === entry.type) { prevEntry = hist[i]; break; }
+  }
+
+  var prompt = 'あなたはトレーニングコーチです。以下のトレーニング記録を見て、日本語で短くコメントしてください（200字以内）。\n\n';
+  prompt += '【今回の記録】\n';
+  prompt += '日付: ' + entry.date + '　種別: ' + (entry.type==='upper'?'上半身':'下半身') + '\n';
+  entry.exercises.forEach(function(ex){
+    prompt += ex.name + ': ';
+    prompt += ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
+    if (ex.extras) {
+      var extKeys = Object.keys(ex.extras);
+      extKeys.forEach(function(k){ if(ex.extras[k]) prompt += '  '+k+': '+ex.extras[k]+'\n'; });
+    }
+  });
+  if (entry.cardio && entry.cardio.length) {
+    entry.cardio.forEach(function(c){
+      prompt += c.name + ': ' + (c.mins?c.mins+'分':'') + (c.load?' 負荷'+c.load:'') + (c.dist?' '+c.dist+'km':'') + '\n';
+    });
+  }
+
+  if (prevEntry) {
+    prompt += '\n【前回の記録】\n';
+    prompt += '日付: ' + prevEntry.date + '\n';
+    prevEntry.exercises.forEach(function(ex){
+      prompt += ex.name + ': ';
+      prompt += ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
+    });
+  }
+
+  prompt += '\n前回との変化、よかった点、改善アドバイスを含めてコメントしてください。また33歳男性の平均的なトレーニングレベルとの比較も一言添えてください。';
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    var text = data.content && data.content[0] ? data.content[0].text : 'コメントを取得できませんでした。';
+    state.data.history[histIdx].aiComment = text;
+    saveData();
+    render();
+  })
+  .catch(function(){
+    state.data.history[histIdx].aiComment = 'コメントの取得に失敗しました。';
+    saveData();
+    render();
+  });
+}
+
+function toggleAIComment(histIdx) {
+  var entry = state.data.history[histIdx];
+  if (!entry.aiComment) {
+    requestAIComment(histIdx);
+  } else if (entry.aiComment === 'loading') {
+    // already loading
+  } else {
+    // toggle off
+    state.data.history[histIdx].aiComment = null;
+    saveData();
+    render();
+  }
+}
+
+function render() {
+  var app = document.getElementById('app');
+  if (!app) return;
+  var screen = state.screen;
+  var data = state.data;
+  if (!data) { app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#f66">データエラー</div>'; return; }
+
+  var hist = data.history;
+  var lastUpper=null, lastLower=null;
+  for(var i=hist.length-1;i>=0;i--){
+    if(!lastUpper&&hist[i].type==='upper')lastUpper=hist[i];
+    if(!lastLower&&hist[i].type==='lower')lastLower=hist[i];
+    if(lastUpper&&lastLower)break;
+  }
+  var suggested = !lastUpper?'upper':!lastLower?'lower': new Date(lastUpper.date)>=new Date(lastLower.date)?'lower':'upper';
+  var label = {upper:'上半身',lower:'下半身'};
+
+  // HOME
+  if (screen==='home') {
+    var other = suggested==='upper'?'lower':'upper';
+    var lastSug = suggested==='upper'?lastUpper:lastLower;
+    app.innerHTML = '<div class="page">'+
+      '<header><span class="logo">GYM</span>'+
+      '<div class="header-btns">'+
+      '<button class="icon-btn" onclick="setState({screen:\'history\'})">📋</button>'+
+      '<button class="icon-btn" onclick="setState({screen:\'settings\'})">⚙️</button>'+
+      '</div></header>'+
+      '<div class="date-row">'+todayLabel()+'</div>'+
+      '<div class="card">'+
+      '<div class="suggest-label">今日のおすすめ</div>'+
+      '<div class="day-big">'+label[suggested]+'</div>'+
+      (lastSug?'<div class="last-info">前回 '+formatDate(lastSug.date)+'</div>':'')+
+      '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START '+label[suggested]+'</button>'+
+      '</div>'+
+      '<button class="secondary-btn" onclick="startSession(\''+other+'\')">'+label[other]+'にする</button>'+
+      '</div>';
+    return;
+  }
+
+  // SESSION
+  if (screen==='session') {
+    var session = state.session;
+    var exHTML = '';
+    session.exercises.forEach(function(ex, ei) {
+      var prevHTML = '';
+      if (ex.prev) ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
+
+      // extra fields (prev values)
+      var prevExtraHTML = '';
+      var fields = EXTRA_FIELDS[ex.id];
+      if (fields && ex.prevExtras) {
+        fields.forEach(function(f){
+          if (ex.prevExtras[f.key]) prevExtraHTML += '<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>';
+        });
+      }
+
+      var extraHTML = '';
+      if (fields) {
+        extraHTML = '<div class="extra-fields">';
+        fields.forEach(function(f){
+          extraHTML += '<div class="extra-row">'+
+            '<span class="extra-label">'+f.label+'</span>'+
+            '<input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)">'+
+            (f.unit?'<span class="extra-unit">'+f.unit+'</span>':'')+
+            '</div>';
+        });
+        extraHTML += '</div>';
+      }
+
+      var setsHTML = '';
+      ex.sets.forEach(function(st,si){
+        setsHTML += '<div class="set-row">'+
+          '<span class="set-num">SET '+(si+1)+'</span>'+
+          '<input class="num-input" type="number" inputmode="decimal" placeholder="kg" value="'+st.kg+'" oninput="updateSet('+ei+','+si+',\'kg\',this.value)">'+
+          '<span class="x-mark">×</span>'+
+          '<input class="num-input" type="number" inputmode="numeric" placeholder="回" value="'+st.reps+'" oninput="updateSet('+ei+','+si+',\'reps\',this.value)">'+
+          (ex.sets.length>1?'<button class="del-btn" onclick="removeSet('+ei+','+si+')">−</button>':'')+
+          '</div>';
+      });
+
+      exHTML += '<div class="ex-card">'+
+        '<div class="ex-name">'+ex.name+'</div>'+
+        ((prevHTML||prevExtraHTML)?'<div class="prev-row">'+prevHTML+prevExtraHTML+'</div>':'')+
+        extraHTML+
+        setsHTML+
+        '<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button>'+
+        '</div>';
+    });
+
+    var cardioHTML = '';
+    session.cardio.forEach(function(c,ci){
+      var prevInfo = [];
+      if(c.prevMins) prevInfo.push(c.prevMins+'分');
+      if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
+      if(c.prevDist) prevInfo.push(c.prevDist+'km');
+      cardioHTML += '<div class="cardio-card">'+
+        '<div class="cardio-name">'+c.name+'</div>'+
+        (prevInfo.length?'<div class="cardio-prev">前回 '+prevInfo.join(' · ')+'</div>':'')+
+        '<div class="cardio-grid">'+
+        '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
+        '<div class="cardio-field"><div class="cardio-field-label">負荷</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.load+'" oninput="updateCardio('+ci+',\'load\',this.value)"></div></div>'+
+        '<div class="cardio-field"><div class="cardio-field-label">距離</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.dist+'" oninput="updateCardio('+ci+',\'dist\',this.value)"><span class="min-label">km</span></div></div>'+
+        '</div></div>';
+    });
+
+    app.innerHTML = '<div class="page">'+
+      '<header><span class="logo" style="font-size:15px">'+label[session.type]+'</span>'+
+      '<button class="ghost-btn" onclick="setState({screen:\'home\',session:null})">✕ キャンセル</button></header>'+
+      '<div class="session-body">'+exHTML+
+      '<hr class="divider">'+
+      '<div class="cardio-section"><div class="cardio-label">有酸素</div>'+cardioHTML+'</div>'+
+      '</div>'+
+      '<div class="bottom-bar"><button class="finish-btn" onclick="finishSession()">記録して終了</button></div>'+
+      '</div>';
+    return;
+  }
+
+  // DONE
+  if (screen==='done') {
+    app.innerHTML = '<div class="done-screen">'+
+      '<div class="done-emoji">💪</div>'+
+      '<div class="done-text">お疲れさまでした！</div>'+
+      '<button class="primary-btn" style="width:180px" onclick="setState({screen:\'home\'})">ホームへ</button>'+
+      '</div>';
+    return;
+  }
+
+  // HISTORY
+  if (screen==='history') {
+    var sorted = hist.slice().reverse();
+    var cardsHTML = '';
+    if (!sorted.length) {
+      cardsHTML = '<div class="empty-msg">記録なし</div>';
+    } else {
+      sorted.forEach(function(h, ri) {
+        var realIdx = hist.length - 1 - ri;
+        var hExHTML = '';
+        h.exercises.forEach(function(ex){
+          var chips = ex.sets.map(function(s){return '<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>';}).join('');
+          var extraChips = '';
+          if (ex.extras) {
+            var fields = EXTRA_FIELDS[ex.id];
+            if (fields) fields.forEach(function(f){ if(ex.extras[f.key]) extraChips+='<span class="prev-chip">'+f.label+' '+ex.extras[f.key]+'</span>'; });
+          }
+          hExHTML += '<div style="margin-top:6px"><div style="color:#aaa;font-size:12px">'+ex.name+'</div>'+
+            '<div class="prev-row" style="margin-top:2px">'+chips+extraChips+'</div></div>';
+        });
+        var hCardioHTML = '';
+        if (h.cardio && h.cardio.length) {
+          hCardioHTML = '<div class="hist-cardio">';
+          h.cardio.forEach(function(c){
+            var info = [c.name];
+            if(c.mins) info.push(c.mins+'分');
+            if(c.load) info.push('負荷'+c.load);
+            if(c.dist) info.push(c.dist+'km');
+            hCardioHTML += '<span class="hist-cardio-chip">🚴 '+info.join(' ')+'</span>';
+          });
+          hCardioHTML += '</div>';
+        }
+
+        var aiSection = '';
+        if (!h.aiComment) {
+          aiSection = '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">🤖 AIコメントを見る</button>';
+        } else if (h.aiComment === 'loading') {
+          aiSection = '<div class="ai-loading">AIがコメントを生成中...</div>';
+        } else {
+          aiSection = '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">🤖 AIコメントを閉じる</button>'+
+            '<div class="ai-comment-box">'+h.aiComment+'</div>';
+        }
+
+        cardsHTML += '<div class="hist-card">'+
+          '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+label[h.type]+'</span></div>'+
+          hExHTML+hCardioHTML+aiSection+
+          '</div>';
+      });
+    }
+    app.innerHTML = '<div class="page">'+
+      '<header><span class="logo">履歴</span>'+
+      '<button class="ghost-btn" onclick="setState({screen:\'home\'})">← 戻る</button></header>'+
+      '<div class="scroll-body">'+cardsHTML+'</div></div>';
+    return;
+  }
+
+  // SETTINGS
+  if (screen==='settings') {
+    var editingEx=state.editingEx, addMode=state.addMode, addText=state.addText, editName=state.editName;
+    var allTypes=[{key:'upper',lbl:'上半身'},{key:'lower',lbl:'下半身'},{key:'cardio',lbl:'有酸素'}];
+    var sectHTML='';
+    allTypes.forEach(function(t){
+      var rows='';
+      data.menus[t.key].forEach(function(mex,ri2){
+        if(editingEx&&editingEx.type===t.key&&editingEx.idx===ri2){
+          rows+='<div class="setting-row">'+
+            '<input class="rename-input" id="rename-input" value="'+editName.replace(/"/g,'&quot;')+'" oninput="state.editName=this.value">'+
+            '<button class="add-set-btn" onclick="renameEx(\''+t.key+'\','+ri2+')">保存</button>'+
+            '<button class="ghost-btn" onclick="setState({editingEx:null,editName:\'\'})">✕</button></div>';
+        } else {
+          rows+='<div class="setting-row">'+
+            '<span class="setting-name">'+mex.name+'</span>'+
+            '<button class="add-set-btn" onclick="setState({editingEx:{type:\''+t.key+'\',idx:'+ri2+'},editName:\''+mex.name.replace(/'/g,"\\'")+'\',addMode:null})">編集</button>'+
+            '<button class="del-btn" onclick="deleteEx(\''+t.key+'\','+ri2+')">−</button></div>';
+        }
+      });
+      var addHTML = addMode===t.key
+        ? '<div class="set-row"><input class="rename-input" placeholder="種目名" value="'+addText.replace(/"/g,'&quot;')+'" oninput="state.addText=this.value" id="add-input"><button class="add-set-btn" onclick="addEx(\''+t.key+'\')">追加</button><button class="ghost-btn" onclick="setState({addMode:null,addText:\'\'})">✕</button></div>'
+        : '<button class="add-set-btn" onclick="setState({addMode:\''+t.key+'\',addText:\'\',editingEx:null})">+ 種目追加</button>';
+      sectHTML+='<div style="margin-bottom:24px"><div class="section-title">'+t.lbl+'</div>'+rows+addHTML+'</div>';
+    });
+    app.innerHTML='<div class="page">'+
+      '<header><span class="logo">メニュー設定</span>'+
+      '<button class="ghost-btn" onclick="setState({screen:\'home\',editingEx:null,addMode:null})">← 戻る</button></header>'+
+      '<div class="scroll-body">'+sectHTML+'</div></div>';
+    var ri=document.getElementById('rename-input'); if(ri)ri.focus();
+    var ai=document.getElementById('add-input'); if(ai)ai.focus();
+    return;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  try {
+    var stored = loadData();
+    state.data = stored || { menus: deepCopy(DEFAULT_MENUS), history: [] };
+    // migrate old data without cardio load/dist
+    if (state.data.menus && !state.data.menus.cardio) {
+      state.data.menus.cardio = deepCopy(DEFAULT_MENUS.cardio);
+    }
+    render();
+  } catch(e) {
+    var app=document.getElementById('app');
+    if(app) app.innerHTML='<div style="color:#f66;padding:32px">起動エラー: '+e.message+'</div>';
+  }
+});
+</script>
+</body>
+</html>
