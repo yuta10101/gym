@@ -60,11 +60,7 @@
   .hist-type { background: #2a2a2a; color: #e8ff47; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
   .hist-cardio { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .hist-cardio-chip { background: #1e2a1e; color: #7ddf7d; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
-  .hist-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .edit-btn { background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; }
-  .ai-btn { background: transparent; color: #7eb8ff; border: 1px solid #2a3a50; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; }
-  .ai-comment-box { background: #0d1a2a; border: 1px solid #2a3a50; border-radius: 10px; padding: 14px; margin-top: 10px; color: #b8d4f8; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
-  .ai-loading { color: #555; font-size: 12px; text-align: center; padding: 12px; }
+  .edit-btn { background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; margin-top: 10px; width: 100%; }
   .editing-badge { background: #2a1a00; color: #ffaa44; border-radius: 6px; padding: 2px 8px; font-size: 11px; }
   .section-title { color: #e8ff47; font-weight: 700; font-size: 13px; letter-spacing: 2px; margin-bottom: 10px; margin-top: 8px; }
   .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -85,9 +81,9 @@
 var STORAGE_KEY = 'gym_tracker_v4';
 
 var EXTRA_FIELDS = {
-  'bench':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
-  'squat':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
-  'incline': [{ key: 'seatHeight', label: '椅子の高さ', unit: '' }],
+  'bench':   [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
+  'squat':   [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
+  'incline': [{ key: 'seatHeight', label: '椅子の高さ' }],
 };
 
 var DEFAULT_MENUS = {
@@ -121,7 +117,7 @@ var state = {
   screen: 'home',
   data: null,
   session: null,
-  editingHistIdx: null, // null = new session, number = editing existing entry
+  editingHistIdx: null,
   editingEx: null,
   addMode: null,
   addText: '',
@@ -138,7 +134,6 @@ function today() { return new Date().toISOString().slice(0,10); }
 function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1)+'/'+dt.getDate(); }
 function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
 
-// 新規セッション開始
 function startSession(type) {
   var hist = state.data.history;
   var exercises = state.data.menus[type].map(function(ex) {
@@ -149,7 +144,7 @@ function startSession(type) {
     if (EXTRA_FIELDS[ex.id]) {
       EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = prevEx && prevEx.extras ? (prevEx.extras[f.key]||'') : ''; });
     }
-    return { id:ex.id, name:ex.name, prev: prevEx?prevEx.sets:null, prevExtras: prevEx?prevEx.extras:null, sets:[{kg:'',reps:''}], extras:extras };
+    return { id:ex.id, name:ex.name, prev:prevEx?prevEx.sets:null, prevExtras:prevEx?prevEx.extras:null, sets:[{kg:'',reps:''}], extras:extras };
   });
   var cardio = state.data.menus.cardio.map(function(c) {
     var prevMins=null, prevLoad=null, prevDist=null;
@@ -161,45 +156,26 @@ function startSession(type) {
   setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:null });
 }
 
-// 既存記録を編集モードで開く
 function editHistoryEntry(histIdx) {
   var entry = state.data.history[histIdx];
   var type = entry.type;
-
-  // exercisesを編集用に変換（前回データなし、現在値をセット）
   var exercises = state.data.menus[type].map(function(ex) {
     var savedEx = (entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
     var extras = {};
     if (EXTRA_FIELDS[ex.id]) {
-      EXTRA_FIELDS[ex.id].forEach(function(f){
-        extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : '';
-      });
+      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : ''; });
     }
-    return {
-      id: ex.id,
-      name: ex.name,
-      prev: null,
-      prevExtras: null,
-      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}],
-      extras: extras,
-    };
+    return { id:ex.id, name:ex.name, prev:null, prevExtras:null,
+      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}], extras:extras };
   });
-
   var cardio = state.data.menus.cardio.map(function(c) {
     var savedC = entry.cardio ? entry.cardio.filter(function(x){return x.id===c.id;})[0] : null;
-    return {
-      id: c.id, name: c.name,
-      prevMins: null, prevLoad: null, prevDist: null,
-      mins: savedC ? (savedC.mins||'') : '',
-      load: savedC ? (savedC.load||'') : '',
-      dist: savedC ? (savedC.dist||'') : '',
-    };
+    return { id:c.id, name:c.name, prevMins:null, prevLoad:null, prevDist:null,
+      mins:savedC?(savedC.mins||''):'', load:savedC?(savedC.load||''):'', dist:savedC?(savedC.dist||''):'' };
   });
-
   setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:histIdx });
 }
 
-// 終了（新規 or 上書き保存）
 function finishSession() {
   var entry = {
     date: state.editingHistIdx !== null ? state.data.history[state.editingHistIdx].date : today(),
@@ -210,9 +186,7 @@ function finishSession() {
     cardio: state.session.cardio.filter(function(c){return c.mins!==''||c.load!==''||c.dist!=='';}).map(function(c){
       return { id:c.id, name:c.name, mins:c.mins, load:c.load, dist:c.dist };
     }),
-    aiComment: state.editingHistIdx !== null ? (state.data.history[state.editingHistIdx].aiComment||null) : null,
   };
-
   if (state.editingHistIdx !== null) {
     state.data.history[state.editingHistIdx] = entry;
   } else {
@@ -231,54 +205,6 @@ function deleteEx(type,idx){ state.data.menus[type].splice(idx,1); saveData(); r
 function renameEx(type,idx){ var name=state.editName.trim(); if(name)state.data.menus[type][idx].name=name; saveData(); setState({editingEx:null,editName:''}); }
 function addEx(type){ var name=state.addText.trim(); if(!name)return; state.data.menus[type].push({id:'ex_'+Date.now(),name:name}); saveData(); setState({addMode:null,addText:''}); }
 
-function requestAIComment(histIdx) {
-  var entry = state.data.history[histIdx];
-  if (entry.aiComment && entry.aiComment !== 'loading') return;
-  state.data.history[histIdx].aiComment = 'loading';
-  saveData(); render();
-
-  var hist = state.data.history;
-  var prevEntry = null;
-  for (var i = histIdx-1; i >= 0; i--) { if (hist[i].type === entry.type) { prevEntry = hist[i]; break; } }
-
-  var prompt = 'あなたはトレーニングコーチです。以下のトレーニング記録を見て、日本語で短くコメントしてください（200字以内）。\n\n';
-  prompt += '【今回の記録】\n日付: ' + entry.date + '　種別: ' + (entry.type==='upper'?'上半身':'下半身') + '\n';
-  entry.exercises.forEach(function(ex){
-    prompt += ex.name + ': ' + ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
-    if (ex.extras) { Object.keys(ex.extras).forEach(function(k){ if(ex.extras[k]) prompt += '  '+k+': '+ex.extras[k]+'\n'; }); }
-  });
-  if (entry.cardio && entry.cardio.length) {
-    entry.cardio.forEach(function(c){ prompt += c.name+': '+(c.mins?c.mins+'分':'')+( c.load?' 負荷'+c.load:'')+(c.dist?' '+c.dist+'km':'')+'\n'; });
-  }
-  if (prevEntry) {
-    prompt += '\n【前回の記録】\n日付: ' + prevEntry.date + '\n';
-    prevEntry.exercises.forEach(function(ex){ prompt += ex.name+': '+ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ')+'\n'; });
-  }
-  prompt += '\n前回との変化、よかった点、改善アドバイスを含めてコメントしてください。また33歳男性の平均的なトレーニングレベルとの比較も一言添えてください。';
-
-  fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(data){
-    state.data.history[histIdx].aiComment = data.content && data.content[0] ? data.content[0].text : 'コメントを取得できませんでした。';
-    saveData(); render();
-  })
-  .catch(function(){
-    state.data.history[histIdx].aiComment = 'コメントの取得に失敗しました。';
-    saveData(); render();
-  });
-}
-
-function toggleAIComment(histIdx) {
-  var entry = state.data.history[histIdx];
-  if (!entry.aiComment) { requestAIComment(histIdx); }
-  else if (entry.aiComment === 'loading') { /* wait */ }
-  else { state.data.history[histIdx].aiComment = null; saveData(); render(); }
-}
-
 function buildSessionHTML(session, isEditing) {
   var label = {upper:'上半身',lower:'下半身'};
   var exHTML = '';
@@ -288,7 +214,7 @@ function buildSessionHTML(session, isEditing) {
     var prevExtraHTML = '';
     var fields = EXTRA_FIELDS[ex.id];
     if (fields && ex.prevExtras) {
-      fields.forEach(function(f){ if (ex.prevExtras[f.key]) prevExtraHTML += '<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
+      fields.forEach(function(f){ if(ex.prevExtras[f.key]) prevExtraHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
     }
     var extraHTML = '';
     if (fields) {
@@ -331,10 +257,10 @@ function buildSessionHTML(session, isEditing) {
 
   var cancelAction = isEditing ? "setState({screen:'history',session:null,editingHistIdx:null})" : "setState({screen:'home',session:null})";
   var finishLabel = isEditing ? '修正を保存' : '記録して終了';
-  var badge = isEditing ? '<span class="editing-badge">編集中</span>' : '';
+  var badge = isEditing ? ' <span class="editing-badge">編集中</span>' : '';
 
   return '<div class="page">'+
-    '<header><span class="logo" style="font-size:15px">'+label[session.type]+' '+badge+'</span>'+
+    '<header><span class="logo" style="font-size:15px">'+label[session.type]+badge+'</span>'+
     '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
     '<div class="session-body">'+exHTML+
     '<hr class="divider">'+
@@ -358,7 +284,7 @@ function render() {
     if(!lastLower&&hist[i].type==='lower')lastLower=hist[i];
     if(lastUpper&&lastLower)break;
   }
-  var suggested = !lastUpper?'upper':!lastLower?'lower': new Date(lastUpper.date)>=new Date(lastLower.date)?'lower':'upper';
+  var suggested = !lastUpper?'upper':!lastLower?'lower':new Date(lastUpper.date)>=new Date(lastLower.date)?'lower':'upper';
   var label = {upper:'上半身',lower:'下半身'};
 
   if (screen==='home') {
@@ -425,23 +351,10 @@ function render() {
           });
           hCardioHTML += '</div>';
         }
-        var aiSection = '';
-        if (!h.aiComment) {
-          aiSection = '';
-        } else if (h.aiComment === 'loading') {
-          aiSection = '<div class="ai-loading">AIがコメントを生成中...</div>';
-        } else {
-          aiSection = '<div class="ai-comment-box">'+h.aiComment+'</div>';
-        }
-
         cardsHTML += '<div class="hist-card">'+
           '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+label[h.type]+'</span></div>'+
           hExHTML+hCardioHTML+
-          '<div class="hist-actions">'+
           '<button class="edit-btn" onclick="editHistoryEntry('+realIdx+')">✏️ 編集</button>'+
-          '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">'+(h.aiComment && h.aiComment!=='loading' ? '🤖 AIコメントを閉じる' : '🤖 AIコメント')+'</button>'+
-          '</div>'+
-          aiSection+
           '</div>';
       });
     }
