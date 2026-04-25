@@ -10,12 +10,7 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
-  body {
-    background: #111; color: #f0f0f0;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    min-height: 100%; max-width: 480px; margin: 0 auto;
-    padding: 0 16px;
-  }
+  body { background: #111; color: #f0f0f0; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 100%; max-width: 480px; margin: 0 auto; padding: 0 16px; }
   header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0 12px; }
   .logo { font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #e8ff47; }
   .date-row { color: #777; font-size: 13px; margin-bottom: 24px; }
@@ -38,13 +33,10 @@
   .x-mark { color: #555; }
   .del-btn { background: #2a0000; color: #f66; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 16px; }
   .add-set-btn { background: transparent; color: #e8ff47; border: 1px solid #333; border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; margin-top: 4px; }
-  /* extra fields */
   .extra-fields { margin-bottom: 10px; }
   .extra-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .extra-label { color: #666; font-size: 11px; width: 110px; flex-shrink: 0; }
   .extra-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; padding: 6px 10px; width: 80px; text-align: center; outline: none; }
-  .extra-unit { color: #555; font-size: 11px; }
-  /* cardio */
   .cardio-section { margin-bottom: 12px; }
   .cardio-label { color: #777; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
   .cardio-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
@@ -62,17 +54,18 @@
   .done-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 24px; }
   .done-emoji { font-size: 64px; }
   .done-text { font-size: 28px; font-weight: 700; color: #e8ff47; }
-  /* history */
   .hist-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
   .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .hist-date { color: #fff; font-weight: 700; }
   .hist-type { background: #2a2a2a; color: #e8ff47; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
   .hist-cardio { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .hist-cardio-chip { background: #1e2a1e; color: #7ddf7d; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
-  .ai-btn { background: transparent; color: #7eb8ff; border: 1px solid #2a3a50; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; margin-top: 10px; width: 100%; }
+  .hist-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .edit-btn { background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; }
+  .ai-btn { background: transparent; color: #7eb8ff; border: 1px solid #2a3a50; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; }
   .ai-comment-box { background: #0d1a2a; border: 1px solid #2a3a50; border-radius: 10px; padding: 14px; margin-top: 10px; color: #b8d4f8; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
   .ai-loading { color: #555; font-size: 12px; text-align: center; padding: 12px; }
-  /* settings */
+  .editing-badge { background: #2a1a00; color: #ffaa44; border-radius: 6px; padding: 2px 8px; font-size: 11px; }
   .section-title { color: #e8ff47; font-weight: 700; font-size: 13px; letter-spacing: 2px; margin-bottom: 10px; margin-top: 8px; }
   .setting-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .setting-name { flex: 1; color: #ddd; }
@@ -91,7 +84,6 @@
 
 var STORAGE_KEY = 'gym_tracker_v4';
 
-// Extra fields per exercise id
 var EXTRA_FIELDS = {
   'bench':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
   'squat':   [{ key: 'barHeight', label: 'バーの高さ', unit: '' }, { key: 'safetyBar', label: 'セーフティーバー', unit: '' }],
@@ -129,6 +121,7 @@ var state = {
   screen: 'home',
   data: null,
   session: null,
+  editingHistIdx: null, // null = new session, number = editing existing entry
   editingEx: null,
   addMode: null,
   addText: '',
@@ -145,6 +138,7 @@ function today() { return new Date().toISOString().slice(0,10); }
 function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1)+'/'+dt.getDate(); }
 function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
 
+// 新規セッション開始
 function startSession(type) {
   var hist = state.data.history;
   var exercises = state.data.menus[type].map(function(ex) {
@@ -164,12 +158,51 @@ function startSession(type) {
     }
     return { id:c.id, name:c.name, prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, mins:'', load:'', dist:'' };
   });
-  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio } });
+  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:null });
 }
 
+// 既存記録を編集モードで開く
+function editHistoryEntry(histIdx) {
+  var entry = state.data.history[histIdx];
+  var type = entry.type;
+
+  // exercisesを編集用に変換（前回データなし、現在値をセット）
+  var exercises = state.data.menus[type].map(function(ex) {
+    var savedEx = (entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
+    var extras = {};
+    if (EXTRA_FIELDS[ex.id]) {
+      EXTRA_FIELDS[ex.id].forEach(function(f){
+        extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : '';
+      });
+    }
+    return {
+      id: ex.id,
+      name: ex.name,
+      prev: null,
+      prevExtras: null,
+      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}],
+      extras: extras,
+    };
+  });
+
+  var cardio = state.data.menus.cardio.map(function(c) {
+    var savedC = entry.cardio ? entry.cardio.filter(function(x){return x.id===c.id;})[0] : null;
+    return {
+      id: c.id, name: c.name,
+      prevMins: null, prevLoad: null, prevDist: null,
+      mins: savedC ? (savedC.mins||'') : '',
+      load: savedC ? (savedC.load||'') : '',
+      dist: savedC ? (savedC.dist||'') : '',
+    };
+  });
+
+  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:histIdx });
+}
+
+// 終了（新規 or 上書き保存）
 function finishSession() {
   var entry = {
-    date: today(),
+    date: state.editingHistIdx !== null ? state.data.history[state.editingHistIdx].date : today(),
     type: state.session.type,
     exercises: state.session.exercises.map(function(ex){
       return { id:ex.id, name:ex.name, sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}), extras:ex.extras };
@@ -177,11 +210,16 @@ function finishSession() {
     cardio: state.session.cardio.filter(function(c){return c.mins!==''||c.load!==''||c.dist!=='';}).map(function(c){
       return { id:c.id, name:c.name, mins:c.mins, load:c.load, dist:c.dist };
     }),
-    aiComment: null,
+    aiComment: state.editingHistIdx !== null ? (state.data.history[state.editingHistIdx].aiComment||null) : null,
   };
-  state.data.history.push(entry);
+
+  if (state.editingHistIdx !== null) {
+    state.data.history[state.editingHistIdx] = entry;
+  } else {
+    state.data.history.push(entry);
+  }
   saveData();
-  setState({ screen:'done', session:null });
+  setState({ screen: state.editingHistIdx !== null ? 'history' : 'done', session:null, editingHistIdx:null });
 }
 
 function updateSet(ei,si,field,val){ state.session.exercises[ei].sets[si][field]=val; }
@@ -193,85 +231,117 @@ function deleteEx(type,idx){ state.data.menus[type].splice(idx,1); saveData(); r
 function renameEx(type,idx){ var name=state.editName.trim(); if(name)state.data.menus[type][idx].name=name; saveData(); setState({editingEx:null,editName:''}); }
 function addEx(type){ var name=state.addText.trim(); if(!name)return; state.data.menus[type].push({id:'ex_'+Date.now(),name:name}); saveData(); setState({addMode:null,addText:''}); }
 
-// AI comment
 function requestAIComment(histIdx) {
   var entry = state.data.history[histIdx];
   if (entry.aiComment && entry.aiComment !== 'loading') return;
-
   state.data.history[histIdx].aiComment = 'loading';
-  saveData();
-  render();
+  saveData(); render();
 
   var hist = state.data.history;
-  // find previous same-type entry
   var prevEntry = null;
-  for (var i = histIdx-1; i >= 0; i--) {
-    if (hist[i].type === entry.type) { prevEntry = hist[i]; break; }
-  }
+  for (var i = histIdx-1; i >= 0; i--) { if (hist[i].type === entry.type) { prevEntry = hist[i]; break; } }
 
   var prompt = 'あなたはトレーニングコーチです。以下のトレーニング記録を見て、日本語で短くコメントしてください（200字以内）。\n\n';
-  prompt += '【今回の記録】\n';
-  prompt += '日付: ' + entry.date + '　種別: ' + (entry.type==='upper'?'上半身':'下半身') + '\n';
+  prompt += '【今回の記録】\n日付: ' + entry.date + '　種別: ' + (entry.type==='upper'?'上半身':'下半身') + '\n';
   entry.exercises.forEach(function(ex){
-    prompt += ex.name + ': ';
-    prompt += ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
-    if (ex.extras) {
-      var extKeys = Object.keys(ex.extras);
-      extKeys.forEach(function(k){ if(ex.extras[k]) prompt += '  '+k+': '+ex.extras[k]+'\n'; });
-    }
+    prompt += ex.name + ': ' + ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
+    if (ex.extras) { Object.keys(ex.extras).forEach(function(k){ if(ex.extras[k]) prompt += '  '+k+': '+ex.extras[k]+'\n'; }); }
   });
   if (entry.cardio && entry.cardio.length) {
-    entry.cardio.forEach(function(c){
-      prompt += c.name + ': ' + (c.mins?c.mins+'分':'') + (c.load?' 負荷'+c.load:'') + (c.dist?' '+c.dist+'km':'') + '\n';
-    });
+    entry.cardio.forEach(function(c){ prompt += c.name+': '+(c.mins?c.mins+'分':'')+( c.load?' 負荷'+c.load:'')+(c.dist?' '+c.dist+'km':'')+'\n'; });
   }
-
   if (prevEntry) {
-    prompt += '\n【前回の記録】\n';
-    prompt += '日付: ' + prevEntry.date + '\n';
-    prevEntry.exercises.forEach(function(ex){
-      prompt += ex.name + ': ';
-      prompt += ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ') + '\n';
-    });
+    prompt += '\n【前回の記録】\n日付: ' + prevEntry.date + '\n';
+    prevEntry.exercises.forEach(function(ex){ prompt += ex.name+': '+ex.sets.map(function(s){return s.kg+'kg×'+s.reps+'回';}).join(', ')+'\n'; });
   }
-
   prompt += '\n前回との変化、よかった点、改善アドバイスを含めてコメントしてください。また33歳男性の平均的なトレーニングレベルとの比較も一言添えてください。';
 
   fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }]
-    })
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
   })
   .then(function(r){ return r.json(); })
   .then(function(data){
-    var text = data.content && data.content[0] ? data.content[0].text : 'コメントを取得できませんでした。';
-    state.data.history[histIdx].aiComment = text;
-    saveData();
-    render();
+    state.data.history[histIdx].aiComment = data.content && data.content[0] ? data.content[0].text : 'コメントを取得できませんでした。';
+    saveData(); render();
   })
   .catch(function(){
     state.data.history[histIdx].aiComment = 'コメントの取得に失敗しました。';
-    saveData();
-    render();
+    saveData(); render();
   });
 }
 
 function toggleAIComment(histIdx) {
   var entry = state.data.history[histIdx];
-  if (!entry.aiComment) {
-    requestAIComment(histIdx);
-  } else if (entry.aiComment === 'loading') {
-    // already loading
-  } else {
-    // toggle off
-    state.data.history[histIdx].aiComment = null;
-    saveData();
-    render();
-  }
+  if (!entry.aiComment) { requestAIComment(histIdx); }
+  else if (entry.aiComment === 'loading') { /* wait */ }
+  else { state.data.history[histIdx].aiComment = null; saveData(); render(); }
+}
+
+function buildSessionHTML(session, isEditing) {
+  var label = {upper:'上半身',lower:'下半身'};
+  var exHTML = '';
+  session.exercises.forEach(function(ex, ei) {
+    var prevHTML = '';
+    if (ex.prev) ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
+    var prevExtraHTML = '';
+    var fields = EXTRA_FIELDS[ex.id];
+    if (fields && ex.prevExtras) {
+      fields.forEach(function(f){ if (ex.prevExtras[f.key]) prevExtraHTML += '<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
+    }
+    var extraHTML = '';
+    if (fields) {
+      extraHTML = '<div class="extra-fields">';
+      fields.forEach(function(f){
+        extraHTML += '<div class="extra-row"><span class="extra-label">'+f.label+'</span>'+
+          '<input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)"></div>';
+      });
+      extraHTML += '</div>';
+    }
+    var setsHTML = '';
+    ex.sets.forEach(function(st,si){
+      setsHTML += '<div class="set-row"><span class="set-num">SET '+(si+1)+'</span>'+
+        '<input class="num-input" type="number" inputmode="decimal" placeholder="kg" value="'+st.kg+'" oninput="updateSet('+ei+','+si+',\'kg\',this.value)">'+
+        '<span class="x-mark">×</span>'+
+        '<input class="num-input" type="number" inputmode="numeric" placeholder="回" value="'+st.reps+'" oninput="updateSet('+ei+','+si+',\'reps\',this.value)">'+
+        (ex.sets.length>1?'<button class="del-btn" onclick="removeSet('+ei+','+si+')">−</button>':'')+
+        '</div>';
+    });
+    exHTML += '<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+
+      ((prevHTML||prevExtraHTML)?'<div class="prev-row">'+prevHTML+prevExtraHTML+'</div>':'')+
+      extraHTML+setsHTML+
+      '<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
+  });
+
+  var cardioHTML = '';
+  session.cardio.forEach(function(c,ci){
+    var prevInfo = [];
+    if(c.prevMins) prevInfo.push(c.prevMins+'分');
+    if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
+    if(c.prevDist) prevInfo.push(c.prevDist+'km');
+    cardioHTML += '<div class="cardio-card"><div class="cardio-name">'+c.name+'</div>'+
+      (prevInfo.length?'<div class="cardio-prev">前回 '+prevInfo.join(' · ')+'</div>':'')+
+      '<div class="cardio-grid">'+
+      '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
+      '<div class="cardio-field"><div class="cardio-field-label">負荷</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.load+'" oninput="updateCardio('+ci+',\'load\',this.value)"></div></div>'+
+      '<div class="cardio-field"><div class="cardio-field-label">距離</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.dist+'" oninput="updateCardio('+ci+',\'dist\',this.value)"><span class="min-label">km</span></div></div>'+
+      '</div></div>';
+  });
+
+  var cancelAction = isEditing ? "setState({screen:'history',session:null,editingHistIdx:null})" : "setState({screen:'home',session:null})";
+  var finishLabel = isEditing ? '修正を保存' : '記録して終了';
+  var badge = isEditing ? '<span class="editing-badge">編集中</span>' : '';
+
+  return '<div class="page">'+
+    '<header><span class="logo" style="font-size:15px">'+label[session.type]+' '+badge+'</span>'+
+    '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
+    '<div class="session-body">'+exHTML+
+    '<hr class="divider">'+
+    '<div class="cardio-section"><div class="cardio-label">有酸素</div>'+cardioHTML+'</div>'+
+    '</div>'+
+    '<div class="bottom-bar"><button class="finish-btn" onclick="finishSession()">'+finishLabel+'</button></div>'+
+    '</div>';
 }
 
 function render() {
@@ -279,7 +349,7 @@ function render() {
   if (!app) return;
   var screen = state.screen;
   var data = state.data;
-  if (!data) { app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#f66">データエラー</div>'; return; }
+  if (!data) { app.innerHTML='<div style="color:#f66;padding:32px">データエラー</div>'; return; }
 
   var hist = data.history;
   var lastUpper=null, lastLower=null;
@@ -291,7 +361,6 @@ function render() {
   var suggested = !lastUpper?'upper':!lastLower?'lower': new Date(lastUpper.date)>=new Date(lastLower.date)?'lower':'upper';
   var label = {upper:'上半身',lower:'下半身'};
 
-  // HOME
   if (screen==='home') {
     var other = suggested==='upper'?'lower':'upper';
     var lastSug = suggested==='upper'?lastUpper:lastLower;
@@ -302,96 +371,20 @@ function render() {
       '<button class="icon-btn" onclick="setState({screen:\'settings\'})">⚙️</button>'+
       '</div></header>'+
       '<div class="date-row">'+todayLabel()+'</div>'+
-      '<div class="card">'+
-      '<div class="suggest-label">今日のおすすめ</div>'+
+      '<div class="card"><div class="suggest-label">今日のおすすめ</div>'+
       '<div class="day-big">'+label[suggested]+'</div>'+
       (lastSug?'<div class="last-info">前回 '+formatDate(lastSug.date)+'</div>':'')+
-      '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START '+label[suggested]+'</button>'+
-      '</div>'+
+      '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START '+label[suggested]+'</button></div>'+
       '<button class="secondary-btn" onclick="startSession(\''+other+'\')">'+label[other]+'にする</button>'+
       '</div>';
     return;
   }
 
-  // SESSION
   if (screen==='session') {
-    var session = state.session;
-    var exHTML = '';
-    session.exercises.forEach(function(ex, ei) {
-      var prevHTML = '';
-      if (ex.prev) ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
-
-      // extra fields (prev values)
-      var prevExtraHTML = '';
-      var fields = EXTRA_FIELDS[ex.id];
-      if (fields && ex.prevExtras) {
-        fields.forEach(function(f){
-          if (ex.prevExtras[f.key]) prevExtraHTML += '<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>';
-        });
-      }
-
-      var extraHTML = '';
-      if (fields) {
-        extraHTML = '<div class="extra-fields">';
-        fields.forEach(function(f){
-          extraHTML += '<div class="extra-row">'+
-            '<span class="extra-label">'+f.label+'</span>'+
-            '<input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)">'+
-            (f.unit?'<span class="extra-unit">'+f.unit+'</span>':'')+
-            '</div>';
-        });
-        extraHTML += '</div>';
-      }
-
-      var setsHTML = '';
-      ex.sets.forEach(function(st,si){
-        setsHTML += '<div class="set-row">'+
-          '<span class="set-num">SET '+(si+1)+'</span>'+
-          '<input class="num-input" type="number" inputmode="decimal" placeholder="kg" value="'+st.kg+'" oninput="updateSet('+ei+','+si+',\'kg\',this.value)">'+
-          '<span class="x-mark">×</span>'+
-          '<input class="num-input" type="number" inputmode="numeric" placeholder="回" value="'+st.reps+'" oninput="updateSet('+ei+','+si+',\'reps\',this.value)">'+
-          (ex.sets.length>1?'<button class="del-btn" onclick="removeSet('+ei+','+si+')">−</button>':'')+
-          '</div>';
-      });
-
-      exHTML += '<div class="ex-card">'+
-        '<div class="ex-name">'+ex.name+'</div>'+
-        ((prevHTML||prevExtraHTML)?'<div class="prev-row">'+prevHTML+prevExtraHTML+'</div>':'')+
-        extraHTML+
-        setsHTML+
-        '<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button>'+
-        '</div>';
-    });
-
-    var cardioHTML = '';
-    session.cardio.forEach(function(c,ci){
-      var prevInfo = [];
-      if(c.prevMins) prevInfo.push(c.prevMins+'分');
-      if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
-      if(c.prevDist) prevInfo.push(c.prevDist+'km');
-      cardioHTML += '<div class="cardio-card">'+
-        '<div class="cardio-name">'+c.name+'</div>'+
-        (prevInfo.length?'<div class="cardio-prev">前回 '+prevInfo.join(' · ')+'</div>':'')+
-        '<div class="cardio-grid">'+
-        '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
-        '<div class="cardio-field"><div class="cardio-field-label">負荷</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.load+'" oninput="updateCardio('+ci+',\'load\',this.value)"></div></div>'+
-        '<div class="cardio-field"><div class="cardio-field-label">距離</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.dist+'" oninput="updateCardio('+ci+',\'dist\',this.value)"><span class="min-label">km</span></div></div>'+
-        '</div></div>';
-    });
-
-    app.innerHTML = '<div class="page">'+
-      '<header><span class="logo" style="font-size:15px">'+label[session.type]+'</span>'+
-      '<button class="ghost-btn" onclick="setState({screen:\'home\',session:null})">✕ キャンセル</button></header>'+
-      '<div class="session-body">'+exHTML+
-      '<hr class="divider">'+
-      '<div class="cardio-section"><div class="cardio-label">有酸素</div>'+cardioHTML+'</div>'+
-      '</div>'+
-      '<div class="bottom-bar"><button class="finish-btn" onclick="finishSession()">記録して終了</button></div>'+
-      '</div>';
+    app.innerHTML = buildSessionHTML(state.session, state.editingHistIdx !== null);
     return;
   }
 
-  // DONE
   if (screen==='done') {
     app.innerHTML = '<div class="done-screen">'+
       '<div class="done-emoji">💪</div>'+
@@ -401,7 +394,6 @@ function render() {
     return;
   }
 
-  // HISTORY
   if (screen==='history') {
     var sorted = hist.slice().reverse();
     var cardsHTML = '';
@@ -433,20 +425,23 @@ function render() {
           });
           hCardioHTML += '</div>';
         }
-
         var aiSection = '';
         if (!h.aiComment) {
-          aiSection = '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">🤖 AIコメントを見る</button>';
+          aiSection = '';
         } else if (h.aiComment === 'loading') {
           aiSection = '<div class="ai-loading">AIがコメントを生成中...</div>';
         } else {
-          aiSection = '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">🤖 AIコメントを閉じる</button>'+
-            '<div class="ai-comment-box">'+h.aiComment+'</div>';
+          aiSection = '<div class="ai-comment-box">'+h.aiComment+'</div>';
         }
 
         cardsHTML += '<div class="hist-card">'+
           '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+label[h.type]+'</span></div>'+
-          hExHTML+hCardioHTML+aiSection+
+          hExHTML+hCardioHTML+
+          '<div class="hist-actions">'+
+          '<button class="edit-btn" onclick="editHistoryEntry('+realIdx+')">✏️ 編集</button>'+
+          '<button class="ai-btn" onclick="toggleAIComment('+realIdx+')">'+(h.aiComment && h.aiComment!=='loading' ? '🤖 AIコメントを閉じる' : '🤖 AIコメント')+'</button>'+
+          '</div>'+
+          aiSection+
           '</div>';
       });
     }
@@ -457,7 +452,6 @@ function render() {
     return;
   }
 
-  // SETTINGS
   if (screen==='settings') {
     var editingEx=state.editingEx, addMode=state.addMode, addText=state.addText, editName=state.editName;
     var allTypes=[{key:'upper',lbl:'上半身'},{key:'lower',lbl:'下半身'},{key:'cardio',lbl:'有酸素'}];
@@ -471,8 +465,7 @@ function render() {
             '<button class="add-set-btn" onclick="renameEx(\''+t.key+'\','+ri2+')">保存</button>'+
             '<button class="ghost-btn" onclick="setState({editingEx:null,editName:\'\'})">✕</button></div>';
         } else {
-          rows+='<div class="setting-row">'+
-            '<span class="setting-name">'+mex.name+'</span>'+
+          rows+='<div class="setting-row"><span class="setting-name">'+mex.name+'</span>'+
             '<button class="add-set-btn" onclick="setState({editingEx:{type:\''+t.key+'\',idx:'+ri2+'},editName:\''+mex.name.replace(/'/g,"\\'")+'\',addMode:null})">編集</button>'+
             '<button class="del-btn" onclick="deleteEx(\''+t.key+'\','+ri2+')">−</button></div>';
         }
@@ -496,7 +489,6 @@ window.addEventListener('DOMContentLoaded', function() {
   try {
     var stored = loadData();
     state.data = stored || { menus: deepCopy(DEFAULT_MENUS), history: [] };
-    // migrate old data without cardio load/dist
     if (state.data.menus && !state.data.menus.cardio) {
       state.data.menus.cardio = deepCopy(DEFAULT_MENUS.cardio);
     }
