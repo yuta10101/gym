@@ -27,6 +27,7 @@
   .ex-name { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: #fff; }
   .prev-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .prev-chip { background: #2a2a2a; color: #aaa; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  .prev-label { color: #555; font-size: 10px; letter-spacing: 1px; margin-bottom: 4px; }
   .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .set-num { color: #555; font-size: 11px; width: 36px; flex-shrink: 0; }
   .num-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 16px; padding: 8px 10px; width: 72px; text-align: center; outline: none; }
@@ -144,14 +145,14 @@ function startSession(type) {
     if (EXTRA_FIELDS[ex.id]) {
       EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = prevEx && prevEx.extras ? (prevEx.extras[f.key]||'') : ''; });
     }
-    return { id:ex.id, name:ex.name, prev:prevEx?prevEx.sets:null, prevExtras:prevEx?prevEx.extras:null, sets:[{kg:'',reps:''}], extras:extras };
+    return { id:ex.id, name:ex.name, prev:prevEx?prevEx.sets:null, prevExtras:prevEx?prevEx.extras:null, prevDate:prevEntry?prevEntry.date:null, sets:[{kg:'',reps:''}], extras:extras };
   });
   var cardio = state.data.menus.cardio.map(function(c) {
-    var prevMins=null, prevLoad=null, prevDist=null;
+    var prevMins=null, prevLoad=null, prevDist=null, prevDate=null;
     for(var i=hist.length-1;i>=0;i--){
-      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;break;} }
+      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;prevDate=hist[i].date;break;} }
     }
-    return { id:c.id, name:c.name, prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, mins:'', load:'', dist:'' };
+    return { id:c.id, name:c.name, prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, prevDate:prevDate, mins:'', load:'', dist:'' };
   });
   setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:null });
 }
@@ -159,20 +160,42 @@ function startSession(type) {
 function editHistoryEntry(histIdx) {
   var entry = state.data.history[histIdx];
   var type = entry.type;
+  var hist = state.data.history;
+
   var exercises = state.data.menus[type].map(function(ex) {
     var savedEx = (entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
+    // 編集中のエントリより前の同タイプ記録を探す
+    var prevEntry=null;
+    for(var i=histIdx-1;i>=0;i--){ if(hist[i].type===type){prevEntry=hist[i];break;} }
+    var prevEx = prevEntry ? (prevEntry.exercises||[]).filter(function(e){return e.id===ex.id;})[0] : null;
     var extras = {};
     if (EXTRA_FIELDS[ex.id]) {
       EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : ''; });
     }
-    return { id:ex.id, name:ex.name, prev:null, prevExtras:null,
-      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}], extras:extras };
+    return {
+      id:ex.id, name:ex.name,
+      prev: prevEx ? prevEx.sets : null,
+      prevExtras: prevEx ? prevEx.extras : null,
+      prevDate: prevEntry ? prevEntry.date : null,
+      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}],
+      extras: extras,
+    };
   });
+
   var cardio = state.data.menus.cardio.map(function(c) {
     var savedC = entry.cardio ? entry.cardio.filter(function(x){return x.id===c.id;})[0] : null;
-    return { id:c.id, name:c.name, prevMins:null, prevLoad:null, prevDist:null,
-      mins:savedC?(savedC.mins||''):'', load:savedC?(savedC.load||''):'', dist:savedC?(savedC.dist||''):'' };
+    // 編集中より前のcardio記録を探す
+    var prevMins=null, prevLoad=null, prevDist=null, prevDate=null;
+    for(var i=histIdx-1;i>=0;i--){
+      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;prevDate=hist[i].date;break;} }
+    }
+    return {
+      id:c.id, name:c.name,
+      prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, prevDate:prevDate,
+      mins:savedC?(savedC.mins||''):'', load:savedC?(savedC.load||''):'', dist:savedC?(savedC.dist||''):'',
+    };
   });
+
   setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:histIdx });
 }
 
@@ -210,13 +233,18 @@ function buildSessionHTML(session, isEditing) {
   var exHTML = '';
   session.exercises.forEach(function(ex, ei) {
     var prevHTML = '';
-    if (ex.prev) ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
-    var prevExtraHTML = '';
-    var fields = EXTRA_FIELDS[ex.id];
-    if (fields && ex.prevExtras) {
-      fields.forEach(function(f){ if(ex.prevExtras[f.key]) prevExtraHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
+    if (ex.prev && ex.prev.length) {
+      prevHTML += '<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+' </div>';
+      prevHTML += '<div class="prev-row">';
+      ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
+      if (ex.prevExtras) {
+        var fields = EXTRA_FIELDS[ex.id];
+        if (fields) fields.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
+      }
+      prevHTML += '</div>';
     }
     var extraHTML = '';
+    var fields = EXTRA_FIELDS[ex.id];
     if (fields) {
       extraHTML = '<div class="extra-fields">';
       fields.forEach(function(f){
@@ -235,8 +263,7 @@ function buildSessionHTML(session, isEditing) {
         '</div>';
     });
     exHTML += '<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+
-      ((prevHTML||prevExtraHTML)?'<div class="prev-row">'+prevHTML+prevExtraHTML+'</div>':'')+
-      extraHTML+setsHTML+
+      prevHTML+extraHTML+setsHTML+
       '<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
   });
 
@@ -246,8 +273,9 @@ function buildSessionHTML(session, isEditing) {
     if(c.prevMins) prevInfo.push(c.prevMins+'分');
     if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
     if(c.prevDist) prevInfo.push(c.prevDist+'km');
+    var prevStr = prevInfo.length ? '前回'+(c.prevDate?' '+formatDate(c.prevDate):'')+' '+prevInfo.join(' · ') : '';
     cardioHTML += '<div class="cardio-card"><div class="cardio-name">'+c.name+'</div>'+
-      (prevInfo.length?'<div class="cardio-prev">前回 '+prevInfo.join(' · ')+'</div>':'')+
+      (prevStr?'<div class="cardio-prev">'+prevStr+'</div>':'')+
       '<div class="cardio-grid">'+
       '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
       '<div class="cardio-field"><div class="cardio-field-label">負荷</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="decimal" placeholder="0" value="'+c.load+'" oninput="updateCardio('+ci+',\'load\',this.value)"></div></div>'+
