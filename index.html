@@ -49,6 +49,7 @@
   .cardio-field-row { display: flex; align-items: center; gap: 4px; }
   .min-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 16px; font-weight: 700; padding: 8px 6px; width: 100%; text-align: center; outline: none; }
   .min-label { color: #555; font-size: 11px; white-space: nowrap; }
+  .session-time-bar { color: #666; font-size: 12px; margin-bottom: 12px; }
   .session-body { overflow-y: auto; padding-bottom: 100px; }
   .bottom-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; padding: 12px 16px 32px; background: linear-gradient(transparent, #111 40%); }
   .finish-btn { width: 100%; background: #e8ff47; color: #111; border: none; border-radius: 12px; padding: 16px 0; font-weight: 800; font-size: 17px; cursor: pointer; }
@@ -56,9 +57,10 @@
   .done-emoji { font-size: 64px; }
   .done-text { font-size: 28px; font-weight: 700; color: #e8ff47; }
   .hist-card { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
-  .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .hist-date { color: #fff; font-weight: 700; }
   .hist-type { background: #2a2a2a; color: #e8ff47; border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .hist-time { color: #666; font-size: 11px; margin-bottom: 8px; }
   .hist-cardio { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .hist-cardio-chip { background: #1e2a1e; color: #7ddf7d; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
   .edit-btn { background: transparent; color: #aaa; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; margin-top: 10px; width: 100%; }
@@ -132,51 +134,67 @@ function setState(patch) {
 }
 
 function today() { return new Date().toISOString().slice(0,10); }
+function nowISO() { return new Date().toISOString(); }
 function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1)+'/'+dt.getDate(); }
+function formatTime(iso) { if(!iso) return ''; var dt=new Date(iso); var h=dt.getHours(); var m=dt.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
 function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
+
+// 指定インデックスより前で、その種目を含む直近の記録を探す（スキップを読み飛ばす）
+function findPrevExercise(hist, beforeIdx, type, exId) {
+  for (var i = beforeIdx; i >= 0; i--) {
+    if (hist[i].type !== type) continue;
+    var found = (hist[i].exercises||[]).filter(function(e){return e.id===exId;})[0];
+    if (found && found.sets && found.sets.length) return { entry: hist[i], ex: found };
+  }
+  return null;
+}
+function findPrevCardio(hist, beforeIdx, cId) {
+  for (var i = beforeIdx; i >= 0; i--) {
+    if (!hist[i].cardio) continue;
+    var found = hist[i].cardio.filter(function(x){return x.id===cId;})[0];
+    if (found) return { entry: hist[i], c: found };
+  }
+  return null;
+}
 
 function startSession(type) {
   var hist = state.data.history;
+  var beforeIdx = hist.length - 1;
   var exercises = state.data.menus[type].map(function(ex) {
-    var prevEntry=null;
-    for(var i=hist.length-1;i>=0;i--){ if(hist[i].type===type){prevEntry=hist[i];break;} }
-    var prevEx = prevEntry ? (prevEntry.exercises||[]).filter(function(e){return e.id===ex.id;})[0] : null;
+    var found = findPrevExercise(hist, beforeIdx, type, ex.id);
     var extras = {};
     if (EXTRA_FIELDS[ex.id]) {
-      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = prevEx && prevEx.extras ? (prevEx.extras[f.key]||'') : ''; });
+      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = found && found.ex.extras ? (found.ex.extras[f.key]||'') : ''; });
     }
-    return { id:ex.id, name:ex.name, prev:prevEx?prevEx.sets:null, prevExtras:prevEx?prevEx.extras:null, prevDate:prevEntry?prevEntry.date:null, sets:[{kg:'',reps:''}], extras:extras };
+    return { id:ex.id, name:ex.name, prev: found?found.ex.sets:null, prevExtras: found?found.ex.extras:null, prevDate: found?found.entry.date:null, sets:[{kg:'',reps:''}], extras:extras };
   });
   var cardio = state.data.menus.cardio.map(function(c) {
-    var prevMins=null, prevLoad=null, prevDist=null, prevDate=null;
-    for(var i=hist.length-1;i>=0;i--){
-      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;prevDate=hist[i].date;break;} }
-    }
-    return { id:c.id, name:c.name, prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, prevDate:prevDate, mins:'', load:'', dist:'' };
+    var found = findPrevCardio(hist, beforeIdx, c.id);
+    return { id:c.id, name:c.name,
+      prevMins: found?found.c.mins:null, prevLoad: found?found.c.load:null, prevDist: found?found.c.dist:null, prevDate: found?found.entry.date:null,
+      mins:'', load:'', dist:'' };
   });
-  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:null });
+  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio, startTime: nowISO() }, editingHistIdx:null });
 }
 
 function editHistoryEntry(histIdx) {
   var entry = state.data.history[histIdx];
   var type = entry.type;
   var hist = state.data.history;
+  var beforeIdx = histIdx - 1;
 
   var exercises = state.data.menus[type].map(function(ex) {
     var savedEx = (entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
-    // 編集中のエントリより前の同タイプ記録を探す
-    var prevEntry=null;
-    for(var i=histIdx-1;i>=0;i--){ if(hist[i].type===type){prevEntry=hist[i];break;} }
-    var prevEx = prevEntry ? (prevEntry.exercises||[]).filter(function(e){return e.id===ex.id;})[0] : null;
+    var found = findPrevExercise(hist, beforeIdx, type, ex.id);
     var extras = {};
     if (EXTRA_FIELDS[ex.id]) {
       EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : ''; });
     }
     return {
       id:ex.id, name:ex.name,
-      prev: prevEx ? prevEx.sets : null,
-      prevExtras: prevEx ? prevEx.extras : null,
-      prevDate: prevEntry ? prevEntry.date : null,
+      prev: found?found.ex.sets:null,
+      prevExtras: found?found.ex.extras:null,
+      prevDate: found?found.entry.date:null,
       sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}],
       extras: extras,
     };
@@ -184,25 +202,24 @@ function editHistoryEntry(histIdx) {
 
   var cardio = state.data.menus.cardio.map(function(c) {
     var savedC = entry.cardio ? entry.cardio.filter(function(x){return x.id===c.id;})[0] : null;
-    // 編集中より前のcardio記録を探す
-    var prevMins=null, prevLoad=null, prevDist=null, prevDate=null;
-    for(var i=histIdx-1;i>=0;i--){
-      if(hist[i].cardio){ var f=hist[i].cardio.filter(function(x){return x.id===c.id;})[0]; if(f){prevMins=f.mins;prevLoad=f.load;prevDist=f.dist;prevDate=hist[i].date;break;} }
-    }
+    var found = findPrevCardio(hist, beforeIdx, c.id);
     return {
       id:c.id, name:c.name,
-      prevMins:prevMins, prevLoad:prevLoad, prevDist:prevDist, prevDate:prevDate,
+      prevMins: found?found.c.mins:null, prevLoad: found?found.c.load:null, prevDist: found?found.c.dist:null, prevDate: found?found.entry.date:null,
       mins:savedC?(savedC.mins||''):'', load:savedC?(savedC.load||''):'', dist:savedC?(savedC.dist||''):'',
     };
   });
 
-  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio }, editingHistIdx:histIdx });
+  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio, startTime: entry.startTime || null }, editingHistIdx:histIdx });
 }
 
 function finishSession() {
+  var existing = state.editingHistIdx !== null ? state.data.history[state.editingHistIdx] : null;
   var entry = {
-    date: state.editingHistIdx !== null ? state.data.history[state.editingHistIdx].date : today(),
+    date: existing ? existing.date : today(),
     type: state.session.type,
+    startTime: state.session.startTime || (existing ? existing.startTime : null),
+    endTime: nowISO(),
     exercises: state.session.exercises.map(function(ex){
       return { id:ex.id, name:ex.name, sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}), extras:ex.extras };
     }),
@@ -286,10 +303,12 @@ function buildSessionHTML(session, isEditing) {
   var cancelAction = isEditing ? "setState({screen:'history',session:null,editingHistIdx:null})" : "setState({screen:'home',session:null})";
   var finishLabel = isEditing ? '修正を保存' : '記録して終了';
   var badge = isEditing ? ' <span class="editing-badge">編集中</span>' : '';
+  var timeInfo = session.startTime ? '開始 '+formatTime(session.startTime) : '';
 
   return '<div class="page">'+
     '<header><span class="logo" style="font-size:15px">'+label[session.type]+badge+'</span>'+
     '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
+    (timeInfo?'<div class="session-time-bar">'+timeInfo+'</div>':'')+
     '<div class="session-body">'+exHTML+
     '<hr class="divider">'+
     '<div class="cardio-section"><div class="cardio-label">有酸素</div>'+cardioHTML+'</div>'+
@@ -379,8 +398,16 @@ function render() {
           });
           hCardioHTML += '</div>';
         }
+        var timeHTML = '';
+        if (h.startTime || h.endTime) {
+          var parts = [];
+          if (h.startTime) parts.push('開始 '+formatTime(h.startTime));
+          if (h.endTime) parts.push('終了 '+formatTime(h.endTime));
+          timeHTML = '<div class="hist-time">'+parts.join(' · ')+'</div>';
+        }
         cardsHTML += '<div class="hist-card">'+
           '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+label[h.type]+'</span></div>'+
+          timeHTML+
           hExHTML+hCardioHTML+
           '<button class="edit-btn" onclick="editHistoryEntry('+realIdx+')">✏️ 編集</button>'+
           '</div>';
