@@ -92,12 +92,12 @@ var EXTRA_FIELDS = {
 };
 
 var DEFAULT_MENUS = {
-  upper: [
+  A: [
     { id: 'bench',   name: 'ベンチプレス' },
     { id: 'lat',     name: 'ラッドプルダウン' },
     { id: 'incline', name: 'アイソラテラルインクラインプレス' },
   ],
-  lower: [
+  B: [
     { id: 'squat',  name: 'スクワット' },
     { id: 'abduct', name: 'ヒップアブダクター' },
     { id: 'adduct', name: 'ヒップアダクター' },
@@ -117,6 +117,24 @@ function storageSet(k,v) { try { localStorage.setItem(k,v); } catch(e) { memStor
 function loadData() { try { var r=storageGet(STORAGE_KEY); return r?JSON.parse(r):null; } catch(e){return null;} }
 function saveData() { try { storageSet(STORAGE_KEY, JSON.stringify(state.data)); } catch(e){} }
 function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+
+// 表示用ラベル（旧upper/lowerと新A/B両対応）
+function typeLabel(type) {
+  if (type === 'A') return 'DAY A';
+  if (type === 'B') return 'DAY B';
+  if (type === 'upper') return '上半身';
+  if (type === 'lower') return '下半身';
+  return type;
+}
+// A/Bの前回記録を探す際、旧upper/lowerも対応するグループとして扱う
+function sameGroup(a, b) {
+  var groupA = (a === 'A' || a === 'upper');
+  var groupB = (b === 'B' || b === 'lower');
+  if (a === b) return true;
+  if ((a === 'A' || a === 'upper') && (b === 'A' || b === 'upper')) return true;
+  if ((a === 'B' || a === 'lower') && (b === 'B' || b === 'lower')) return true;
+  return false;
+}
 
 var state = {
   screen: 'home',
@@ -138,104 +156,82 @@ function setState(patch) {
 function today() { return new Date().toISOString().slice(0,10); }
 function nowISO() { return new Date().toISOString(); }
 function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return (dt.getMonth()+1)+'/'+dt.getDate(); }
-function formatTime(iso) { if(!iso) return ''; var dt=new Date(iso); var h=dt.getHours(); var m=dt.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
+function formatTime(iso) { if(!iso)return''; var dt=new Date(iso); var h=dt.getHours(); var m=dt.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
 function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
 
-// 指定インデックスより前で、その種目を含む直近の記録を探す（スキップを読み飛ばす）
 function findPrevExercise(hist, beforeIdx, type, exId) {
-  for (var i = beforeIdx; i >= 0; i--) {
-    if (hist[i].type !== type) continue;
-    var found = (hist[i].exercises||[]).filter(function(e){return e.id===exId;})[0];
-    if (found && found.sets && found.sets.length) return { entry: hist[i], ex: found };
+  for (var i=beforeIdx;i>=0;i--) {
+    if (!sameGroup(hist[i].type, type)) continue;
+    var found=(hist[i].exercises||[]).filter(function(e){return e.id===exId;})[0];
+    if (found&&found.sets&&found.sets.length) return {entry:hist[i],ex:found};
   }
   return null;
 }
 function findPrevCardio(hist, beforeIdx, cId) {
-  for (var i = beforeIdx; i >= 0; i--) {
+  for (var i=beforeIdx;i>=0;i--) {
     if (!hist[i].cardio) continue;
-    var found = hist[i].cardio.filter(function(x){return x.id===cId;})[0];
-    if (found) return { entry: hist[i], c: found };
+    var found=hist[i].cardio.filter(function(x){return x.id===cId;})[0];
+    if (found) return {entry:hist[i],c:found};
   }
   return null;
 }
 
 function startSession(type) {
   var hist = state.data.history;
-  var beforeIdx = hist.length - 1;
+  var beforeIdx = hist.length-1;
   var exercises = state.data.menus[type].map(function(ex) {
-    var found = findPrevExercise(hist, beforeIdx, type, ex.id);
-    var extras = {};
-    if (EXTRA_FIELDS[ex.id]) {
-      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = found && found.ex.extras ? (found.ex.extras[f.key]||'') : ''; });
-    }
-    return { id:ex.id, name:ex.name, prev: found?found.ex.sets:null, prevExtras: found?found.ex.extras:null, prevDate: found?found.entry.date:null, sets:[{kg:'',reps:''}], extras:extras };
+    var found=findPrevExercise(hist,beforeIdx,type,ex.id);
+    var extras={};
+    if (EXTRA_FIELDS[ex.id]) EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key]=found&&found.ex.extras?(found.ex.extras[f.key]||''):''; });
+    return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,sets:[{kg:'',reps:''}],extras:extras};
   });
-  var cardio = state.data.menus.cardio.map(function(c) {
-    var found = findPrevCardio(hist, beforeIdx, c.id);
-    return { id:c.id, name:c.name,
-      prevMins: found?found.c.mins:null, prevLoad: found?found.c.load:null, prevDist: found?found.c.dist:null, prevDate: found?found.entry.date:null,
-      mins:'', load:'', dist:'' };
+  var cardio=state.data.menus.cardio.map(function(c){
+    var found=findPrevCardio(hist,beforeIdx,c.id);
+    return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevDate:found?found.entry.date:null,mins:'',load:'',dist:''};
   });
-  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio, startTime: nowISO() }, editingHistIdx:null });
+  setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:nowISO()},editingHistIdx:null});
 }
 
 function editHistoryEntry(histIdx) {
-  var entry = state.data.history[histIdx];
-  var type = entry.type;
-  var hist = state.data.history;
-  var beforeIdx = histIdx - 1;
-
-  var exercises = state.data.menus[type].map(function(ex) {
-    var savedEx = (entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
-    var found = findPrevExercise(hist, beforeIdx, type, ex.id);
-    var extras = {};
-    if (EXTRA_FIELDS[ex.id]) {
-      EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key] = savedEx && savedEx.extras ? (savedEx.extras[f.key]||'') : ''; });
-    }
-    return {
-      id:ex.id, name:ex.name,
-      prev: found?found.ex.sets:null,
-      prevExtras: found?found.ex.extras:null,
-      prevDate: found?found.entry.date:null,
-      sets: savedEx && savedEx.sets && savedEx.sets.length ? deepCopy(savedEx.sets) : [{kg:'',reps:''}],
-      extras: extras,
-    };
+  var entry=state.data.history[histIdx];
+  var type=entry.type;
+  var hist=state.data.history;
+  var beforeIdx=histIdx-1;
+  var exercises=state.data.menus[type].map(function(ex){
+    var savedEx=(entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
+    var found=findPrevExercise(hist,beforeIdx,type,ex.id);
+    var extras={};
+    if (EXTRA_FIELDS[ex.id]) EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key]=savedEx&&savedEx.extras?(savedEx.extras[f.key]||''):''; });
+    return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,
+      sets:savedEx&&savedEx.sets&&savedEx.sets.length?deepCopy(savedEx.sets):[{kg:'',reps:''}],extras:extras};
   });
-
-  var cardio = state.data.menus.cardio.map(function(c) {
-    var savedC = entry.cardio ? entry.cardio.filter(function(x){return x.id===c.id;})[0] : null;
-    var found = findPrevCardio(hist, beforeIdx, c.id);
-    return {
-      id:c.id, name:c.name,
-      prevMins: found?found.c.mins:null, prevLoad: found?found.c.load:null, prevDist: found?found.c.dist:null, prevDate: found?found.entry.date:null,
-      mins:savedC?(savedC.mins||''):'', load:savedC?(savedC.load||''):'', dist:savedC?(savedC.dist||''):'',
-    };
+  var cardio=state.data.menus.cardio.map(function(c){
+    var savedC=entry.cardio?entry.cardio.filter(function(x){return x.id===c.id;})[0]:null;
+    var found=findPrevCardio(hist,beforeIdx,c.id);
+    return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevDate:found?found.entry.date:null,
+      mins:savedC?(savedC.mins||''):'',load:savedC?(savedC.load||''):'',dist:savedC?(savedC.dist||''):''};
   });
-
-  setState({ screen:'session', session:{ type:type, exercises:exercises, cardio:cardio, startTime: entry.startTime || null }, editingHistIdx:histIdx });
+  setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:entry.startTime||null},editingHistIdx:histIdx});
 }
 
 function finishSession() {
-  var existing = state.editingHistIdx !== null ? state.data.history[state.editingHistIdx] : null;
-  var entry = {
-    date: existing ? existing.date : today(),
-    type: state.session.type,
-    startTime: state.session.startTime || (existing ? existing.startTime : null),
-    endTime: nowISO(),
-    exercises: state.session.exercises.map(function(ex){
-      return { id:ex.id, name:ex.name, sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}), extras:ex.extras };
+  var existing=state.editingHistIdx!==null?state.data.history[state.editingHistIdx]:null;
+  var entry={
+    date:existing?existing.date:today(),
+    type:state.session.type,
+    startTime:state.session.startTime||(existing?existing.startTime:null),
+    endTime:nowISO(),
+    exercises:state.session.exercises.map(function(ex){
+      return {id:ex.id,name:ex.name,sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}),extras:ex.extras};
     }),
-    cardio: state.session.cardio.filter(function(c){return c.mins!==''||c.load!==''||c.dist!=='';}).map(function(c){
-      return { id:c.id, name:c.name, mins:c.mins, load:c.load, dist:c.dist };
+    cardio:state.session.cardio.filter(function(c){return c.mins!==''||c.load!==''||c.dist!=='';}).map(function(c){
+      return {id:c.id,name:c.name,mins:c.mins,load:c.load,dist:c.dist};
     }),
   };
-  if (state.editingHistIdx !== null) {
-    state.data.history[state.editingHistIdx] = entry;
-  } else {
-    state.data.history.push(entry);
-  }
+  if (state.editingHistIdx!==null) { state.data.history[state.editingHistIdx]=entry; }
+  else { state.data.history.push(entry); }
   saveData();
-  setState({ screen: state.editingHistIdx !== null ? 'history' : 'done', session:null, editingHistIdx:null });
+  setState({screen:state.editingHistIdx!==null?'history':'done',session:null,editingHistIdx:null});
 }
 
 function updateSet(ei,si,field,val){ state.session.exercises[ei].sets[si][field]=val; }
@@ -247,53 +243,43 @@ function deleteEx(type,idx){ state.data.menus[type].splice(idx,1); saveData(); r
 function renameEx(type,idx){ var name=state.editName.trim(); if(name)state.data.menus[type][idx].name=name; saveData(); setState({editingEx:null,editName:''}); }
 function addEx(type){ var name=state.addText.trim(); if(!name)return; state.data.menus[type].push({id:'ex_'+Date.now(),name:name}); saveData(); setState({addMode:null,addText:''}); }
 
-function buildSessionHTML(session, isEditing) {
-  var label = {upper:'上半身',lower:'下半身'};
-  var exHTML = '';
-  session.exercises.forEach(function(ex, ei) {
-    var prevHTML = '';
-    if (ex.prev && ex.prev.length) {
-      prevHTML += '<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+' </div>';
-      prevHTML += '<div class="prev-row">';
+function buildSessionHTML(session,isEditing) {
+  var exHTML='';
+  session.exercises.forEach(function(ex,ei){
+    var prevHTML='';
+    if (ex.prev&&ex.prev.length) {
+      prevHTML+='<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+' </div><div class="prev-row">';
       ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
-      if (ex.prevExtras) {
-        var fields = EXTRA_FIELDS[ex.id];
-        if (fields) fields.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; });
-      }
-      prevHTML += '</div>';
+      if (ex.prevExtras) { var ff=EXTRA_FIELDS[ex.id]; if(ff) ff.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; }); }
+      prevHTML+='</div>';
     }
-    var extraHTML = '';
-    var fields = EXTRA_FIELDS[ex.id];
+    var extraHTML='';
+    var fields=EXTRA_FIELDS[ex.id];
     if (fields) {
-      extraHTML = '<div class="extra-fields">';
-      fields.forEach(function(f){
-        extraHTML += '<div class="extra-row"><span class="extra-label">'+f.label+'</span>'+
-          '<input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)"></div>';
-      });
-      extraHTML += '</div>';
+      extraHTML='<div class="extra-fields">';
+      fields.forEach(function(f){ extraHTML+='<div class="extra-row"><span class="extra-label">'+f.label+'</span><input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)"></div>'; });
+      extraHTML+='</div>';
     }
-    var setsHTML = '';
+    var setsHTML='';
     ex.sets.forEach(function(st,si){
-      setsHTML += '<div class="set-row"><span class="set-num">SET '+(si+1)+'</span>'+
+      setsHTML+='<div class="set-row"><span class="set-num">SET '+(si+1)+'</span>'+
         '<input class="num-input" type="number" inputmode="decimal" placeholder="kg" value="'+st.kg+'" oninput="updateSet('+ei+','+si+',\'kg\',this.value)">'+
         '<span class="x-mark">×</span>'+
         '<input class="num-input" type="number" inputmode="numeric" placeholder="回" value="'+st.reps+'" oninput="updateSet('+ei+','+si+',\'reps\',this.value)">'+
         (ex.sets.length>1?'<button class="del-btn" onclick="removeSet('+ei+','+si+')">−</button>':'')+
         '</div>';
     });
-    exHTML += '<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+
-      prevHTML+extraHTML+setsHTML+
-      '<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
+    exHTML+='<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+prevHTML+extraHTML+setsHTML+'<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
   });
 
-  var cardioHTML = '';
+  var cardioHTML='';
   session.cardio.forEach(function(c,ci){
-    var prevInfo = [];
+    var prevInfo=[];
     if(c.prevMins) prevInfo.push(c.prevMins+'分');
     if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
     if(c.prevDist) prevInfo.push(c.prevDist+'km');
-    var prevStr = prevInfo.length ? '前回'+(c.prevDate?' '+formatDate(c.prevDate):'')+' '+prevInfo.join(' · ') : '';
-    cardioHTML += '<div class="cardio-card"><div class="cardio-name">'+c.name+'</div>'+
+    var prevStr=prevInfo.length?'前回'+(c.prevDate?' '+formatDate(c.prevDate):'')+' '+prevInfo.join(' · '):'';
+    cardioHTML+='<div class="cardio-card"><div class="cardio-name">'+c.name+'</div>'+
       (prevStr?'<div class="cardio-prev">'+prevStr+'</div>':'')+
       '<div class="cardio-grid">'+
       '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
@@ -302,13 +288,13 @@ function buildSessionHTML(session, isEditing) {
       '</div></div>';
   });
 
-  var cancelAction = isEditing ? "setState({screen:'history',session:null,editingHistIdx:null})" : "setState({screen:'home',session:null})";
-  var finishLabel = isEditing ? '修正を保存' : '記録して終了';
-  var badge = isEditing ? ' <span class="editing-badge">編集中</span>' : '';
-  var timeInfo = session.startTime ? '開始 '+formatTime(session.startTime) : '';
+  var cancelAction=isEditing?"setState({screen:'history',session:null,editingHistIdx:null})":"setState({screen:'home',session:null})";
+  var finishLabel=isEditing?'修正を保存':'記録して終了';
+  var badge=isEditing?' <span class="editing-badge">編集中</span>':'';
+  var timeInfo=session.startTime?'開始 '+formatTime(session.startTime):'';
 
   return '<div class="page">'+
-    '<header><span class="logo" style="font-size:15px">'+label[session.type]+badge+'</span>'+
+    '<header><span class="logo" style="font-size:15px">DAY '+session.type+badge+'</span>'+
     '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
     (timeInfo?'<div class="session-time-bar">'+timeInfo+'</div>':'')+
     '<div class="session-body">'+exHTML+
@@ -320,26 +306,24 @@ function buildSessionHTML(session, isEditing) {
 }
 
 function render() {
-  var app = document.getElementById('app');
+  var app=document.getElementById('app');
   if (!app) return;
-  var screen = state.screen;
-  var data = state.data;
+  var screen=state.screen, data=state.data;
   if (!data) { app.innerHTML='<div style="color:#f66;padding:32px">データエラー</div>'; return; }
 
-  var hist = data.history;
-  var lastUpper=null, lastLower=null;
+  var hist=data.history;
+  var lastA=null,lastB=null;
   for(var i=hist.length-1;i>=0;i--){
-    if(!lastUpper&&hist[i].type==='upper')lastUpper=hist[i];
-    if(!lastLower&&hist[i].type==='lower')lastLower=hist[i];
-    if(lastUpper&&lastLower)break;
+    if(!lastA&&(hist[i].type==='A'||hist[i].type==='upper'))lastA=hist[i];
+    if(!lastB&&(hist[i].type==='B'||hist[i].type==='lower'))lastB=hist[i];
+    if(lastA&&lastB)break;
   }
-  var suggested = !lastUpper?'upper':!lastLower?'lower':new Date(lastUpper.date)>=new Date(lastLower.date)?'lower':'upper';
-  var label = {upper:'上半身',lower:'下半身'};
+  var suggested=!lastA?'A':!lastB?'B':new Date(lastA.date)>=new Date(lastB.date)?'B':'A';
 
   if (screen==='home') {
-    var other = suggested==='upper'?'lower':'upper';
-    var lastSug = suggested==='upper'?lastUpper:lastLower;
-    app.innerHTML = '<div class="page">'+
+    var other=suggested==='A'?'B':'A';
+    var lastSug=suggested==='A'?lastA:lastB;
+    app.innerHTML='<div class="page">'+
       '<header><span class="logo">GYM</span>'+
       '<div class="header-btns">'+
       '<button class="icon-btn" onclick="setState({screen:\'history\'})">📋</button>'+
@@ -347,91 +331,67 @@ function render() {
       '</div></header>'+
       '<div class="date-row">'+todayLabel()+'</div>'+
       '<div class="card"><div class="suggest-label">今日のおすすめ</div>'+
-      '<div class="day-big">'+label[suggested]+'</div>'+
+      '<div class="day-big">DAY '+suggested+'</div>'+
       (lastSug?'<div class="last-info">前回 '+formatDate(lastSug.date)+'</div>':'')+
-      '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START '+label[suggested]+'</button></div>'+
-      '<button class="secondary-btn" onclick="startSession(\''+other+'\')">'+label[other]+'にする</button>'+
+      '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START DAY '+suggested+'</button></div>'+
+      '<button class="secondary-btn" onclick="startSession(\''+other+'\')">DAY '+other+' にする</button>'+
       '</div>';
     return;
   }
 
-  if (screen==='session') {
-    app.innerHTML = buildSessionHTML(state.session, state.editingHistIdx !== null);
-    return;
-  }
+  if (screen==='session') { app.innerHTML=buildSessionHTML(state.session,state.editingHistIdx!==null); return; }
 
   if (screen==='done') {
-    app.innerHTML = '<div class="done-screen">'+
-      '<div class="done-emoji">💪</div>'+
-      '<div class="done-text">お疲れさまでした！</div>'+
-      '<button class="primary-btn" style="width:180px" onclick="setState({screen:\'home\'})">ホームへ</button>'+
-      '</div>';
+    app.innerHTML='<div class="done-screen"><div class="done-emoji">💪</div><div class="done-text">お疲れさまでした！</div>'+
+      '<button class="primary-btn" style="width:180px" onclick="setState({screen:\'home\'})">ホームへ</button></div>';
     return;
   }
 
   if (screen==='history') {
-    var sorted = hist.slice().reverse();
-    var cardsHTML = '';
+    var sorted=hist.slice().reverse();
+    var cardsHTML='';
     if (!sorted.length) {
-      cardsHTML = '<div class="empty-msg">記録なし</div>';
+      cardsHTML='<div class="empty-msg">記録なし</div>';
     } else {
-      sorted.forEach(function(h, ri) {
-        var realIdx = hist.length - 1 - ri;
-        var hExHTML = '';
+      sorted.forEach(function(h,ri){
+        var realIdx=hist.length-1-ri;
+        var hExHTML='';
         h.exercises.forEach(function(ex){
-          var chips = ex.sets.map(function(s){return '<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>';}).join('');
-          var extraChips = '';
-          if (ex.extras) {
-            var fields = EXTRA_FIELDS[ex.id];
-            if (fields) fields.forEach(function(f){ if(ex.extras[f.key]) extraChips+='<span class="prev-chip">'+f.label+' '+ex.extras[f.key]+'</span>'; });
-          }
-          hExHTML += '<div style="margin-top:6px"><div style="color:#aaa;font-size:12px">'+ex.name+'</div>'+
-            '<div class="prev-row" style="margin-top:2px">'+chips+extraChips+'</div></div>';
+          var chips=ex.sets.map(function(s){return '<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>';}).join('');
+          var extraChips='';
+          if(ex.extras){var ff=EXTRA_FIELDS[ex.id];if(ff)ff.forEach(function(f){if(ex.extras[f.key])extraChips+='<span class="prev-chip">'+f.label+' '+ex.extras[f.key]+'</span>';});}
+          hExHTML+='<div style="margin-top:6px"><div style="color:#aaa;font-size:12px">'+ex.name+'</div><div class="prev-row" style="margin-top:2px">'+chips+extraChips+'</div></div>';
         });
-        var hCardioHTML = '';
-        if (h.cardio && h.cardio.length) {
-          hCardioHTML = '<div class="hist-cardio">';
-          h.cardio.forEach(function(c){
-            var info = [c.name];
-            if(c.mins) info.push(c.mins+'分');
-            if(c.load) info.push('負荷'+c.load);
-            if(c.dist) info.push(c.dist+'km');
-            hCardioHTML += '<span class="hist-cardio-chip">🚴 '+info.join(' ')+'</span>';
-          });
-          hCardioHTML += '</div>';
+        var hCardioHTML='';
+        if(h.cardio&&h.cardio.length){
+          hCardioHTML='<div class="hist-cardio">';
+          h.cardio.forEach(function(c){var info=[c.name];if(c.mins)info.push(c.mins+'分');if(c.load)info.push('負荷'+c.load);if(c.dist)info.push(c.dist+'km');hCardioHTML+='<span class="hist-cardio-chip">🚴 '+info.join(' ')+'</span>';});
+          hCardioHTML+='</div>';
         }
-        var timeHTML = '';
-        if (h.startTime || h.endTime) {
-          var parts = [];
-          if (h.startTime) parts.push('開始 '+formatTime(h.startTime));
-          if (h.endTime) parts.push('終了 '+formatTime(h.endTime));
-          timeHTML = '<div class="hist-time">'+parts.join(' · ')+'</div>';
-        }
-        cardsHTML += '<div class="hist-card">'+
-          '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+label[h.type]+'</span></div>'+
-          timeHTML+
-          hExHTML+hCardioHTML+
+        var timeHTML='';
+        if(h.startTime||h.endTime){var parts=[];if(h.startTime)parts.push('開始 '+formatTime(h.startTime));if(h.endTime)parts.push('終了 '+formatTime(h.endTime));timeHTML='<div class="hist-time">'+parts.join(' · ')+'</div>';}
+        cardsHTML+='<div class="hist-card">'+
+          '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+typeLabel(h.type)+'</span></div>'+
+          timeHTML+hExHTML+hCardioHTML+
           '<button class="edit-btn" onclick="editHistoryEntry('+realIdx+')">✏️ 編集</button>'+
           '</div>';
       });
     }
-    app.innerHTML = '<div class="page">'+
-      '<header><span class="logo">履歴</span>'+
+    app.innerHTML='<div class="page"><header><span class="logo">履歴</span>'+
       '<button class="ghost-btn" onclick="setState({screen:\'home\'})">← 戻る</button></header>'+
       '<div class="scroll-body">'+cardsHTML+'</div></div>';
     return;
   }
 
   if (screen==='settings') {
-    var editingEx=state.editingEx, addMode=state.addMode, addText=state.addText, editName=state.editName;
-    var allTypes=[{key:'upper',lbl:'上半身'},{key:'lower',lbl:'下半身'},{key:'cardio',lbl:'有酸素'}];
+    var editingEx=state.editingEx,addMode=state.addMode,addText=state.addText,editName=state.editName;
+    var allTypes=[{key:'A',lbl:'DAY A'},{key:'B',lbl:'DAY B'},{key:'cardio',lbl:'有酸素'}];
     var sectHTML='';
     allTypes.forEach(function(t){
       var rows='';
       data.menus[t.key].forEach(function(mex,ri2){
         if(editingEx&&editingEx.type===t.key&&editingEx.idx===ri2){
-          rows+='<div class="setting-row">'+
-            '<input class="rename-input" id="rename-input" value="'+editName.replace(/"/g,'&quot;')+'" oninput="state.editName=this.value">'+
+          rows+='<div class="setting-row"><input class="rename-input" id="rename-input" value="'+editName.replace(/"/g,'&quot;')+'" oninput="state.editName=this.value">'+
             '<button class="add-set-btn" onclick="renameEx(\''+t.key+'\','+ri2+')">保存</button>'+
             '<button class="ghost-btn" onclick="setState({editingEx:null,editName:\'\'})">✕</button></div>';
         } else {
@@ -440,28 +400,29 @@ function render() {
             '<button class="del-btn" onclick="deleteEx(\''+t.key+'\','+ri2+')">−</button></div>';
         }
       });
-      var addHTML = addMode===t.key
-        ? '<div class="set-row"><input class="rename-input" placeholder="種目名" value="'+addText.replace(/"/g,'&quot;')+'" oninput="state.addText=this.value" id="add-input"><button class="add-set-btn" onclick="addEx(\''+t.key+'\')">追加</button><button class="ghost-btn" onclick="setState({addMode:null,addText:\'\'})">✕</button></div>'
-        : '<button class="add-set-btn" onclick="setState({addMode:\''+t.key+'\',addText:\'\',editingEx:null})">+ 種目追加</button>';
+      var addHTML=addMode===t.key
+        ?'<div class="set-row"><input class="rename-input" placeholder="種目名" value="'+addText.replace(/"/g,'&quot;')+'" oninput="state.addText=this.value" id="add-input"><button class="add-set-btn" onclick="addEx(\''+t.key+'\')">追加</button><button class="ghost-btn" onclick="setState({addMode:null,addText:\'\'})">✕</button></div>'
+        :'<button class="add-set-btn" onclick="setState({addMode:\''+t.key+'\',addText:\'\',editingEx:null})">+ 種目追加</button>';
       sectHTML+='<div style="margin-bottom:24px"><div class="section-title">'+t.lbl+'</div>'+rows+addHTML+'</div>';
     });
-    app.innerHTML='<div class="page">'+
-      '<header><span class="logo">メニュー設定</span>'+
+    app.innerHTML='<div class="page"><header><span class="logo">メニュー設定</span>'+
       '<button class="ghost-btn" onclick="setState({screen:\'home\',editingEx:null,addMode:null})">← 戻る</button></header>'+
       '<div class="scroll-body">'+sectHTML+'</div></div>';
-    var ri=document.getElementById('rename-input'); if(ri)ri.focus();
-    var ai=document.getElementById('add-input'); if(ai)ai.focus();
+    var ri=document.getElementById('rename-input');if(ri)ri.focus();
+    var ai=document.getElementById('add-input');if(ai)ai.focus();
     return;
   }
 }
 
 window.addEventListener('DOMContentLoaded', function() {
   try {
-    var stored = loadData();
-    state.data = stored || { menus: deepCopy(DEFAULT_MENUS), history: [] };
-    if (state.data.menus && !state.data.menus.cardio) {
-      state.data.menus.cardio = deepCopy(DEFAULT_MENUS.cardio);
-    }
+    var stored=loadData();
+    var data=stored||{menus:deepCopy(DEFAULT_MENUS),history:[]};
+    if (!data.menus.cardio) data.menus.cardio=deepCopy(DEFAULT_MENUS.cardio);
+    if (!data.menus.A) data.menus.A=deepCopy(DEFAULT_MENUS.A);
+    if (!data.menus.B) data.menus.B=deepCopy(DEFAULT_MENUS.B);
+    state.data=data;
+    saveData();
     render();
   } catch(e) {
     var app=document.getElementById('app');
