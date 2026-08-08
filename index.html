@@ -83,13 +83,16 @@
 
 var STORAGE_KEY = 'gym_tracker_v4';
 
-var EXTRA_FIELDS = {
-  'bench':   [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
-  'squat':   [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
-  'incline': [{ key: 'seatHeight', label: '椅子の高さ' }],
-  'curl':    [{ key: 'padPos', label: 'パッドの位置' }, { key: 'rangeOfMotion', label: '可動域' }],
-  'ext':     [{ key: 'seatPos', label: '椅子の位置' }, { key: 'padPos', label: 'パッドの位置' }, { key: 'rangeOfMotion', label: '可動域' }],
+// 種目名で紐付け（IDではなく名前で管理するので削除・追加し直しても消えない）
+var EXTRA_FIELDS_BY_NAME = {
+  'スクワット':    [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
+  'ベンチプレス':  [{ key: 'barHeight', label: 'バーの高さ' }, { key: 'safetyBar', label: 'セーフティーバー' }],
+  'レッグカール':  [{ key: 'padPos', label: 'パッドの位置' }, { key: 'rangeOfMotion', label: '可動域' }],
 };
+
+function getExtraFields(ex) {
+  return EXTRA_FIELDS_BY_NAME[ex.name] || null;
+}
 
 var DEFAULT_MENUS = {
   A: [
@@ -182,7 +185,7 @@ function startSession(type) {
   var exercises = state.data.menus[type].map(function(ex) {
     var found=findPrevExercise(hist,beforeIdx,type,ex.id);
     var extras={};
-    if (EXTRA_FIELDS[ex.id]) EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key]=found&&found.ex.extras?(found.ex.extras[f.key]||''):''; });
+    if (getExtraFields(ex)) getExtraFields(ex).forEach(function(f){ extras[f.key]=found&&found.ex.extras?(found.ex.extras[f.key]||''):''; });
     return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,sets:[{kg:'',reps:''}],extras:extras};
   });
   var cardio=state.data.menus.cardio.map(function(c){
@@ -201,7 +204,7 @@ function editHistoryEntry(histIdx) {
     var savedEx=(entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
     var found=findPrevExercise(hist,beforeIdx,type,ex.id);
     var extras={};
-    if (EXTRA_FIELDS[ex.id]) EXTRA_FIELDS[ex.id].forEach(function(f){ extras[f.key]=savedEx&&savedEx.extras?(savedEx.extras[f.key]||''):''; });
+    if (getExtraFields(ex)) getExtraFields(ex).forEach(function(f){ extras[f.key]=savedEx&&savedEx.extras?(savedEx.extras[f.key]||''):''; });
     return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,
       sets:savedEx&&savedEx.sets&&savedEx.sets.length?deepCopy(savedEx.sets):[{kg:'',reps:''}],extras:extras};
   });
@@ -250,11 +253,11 @@ function buildSessionHTML(session,isEditing) {
     if (ex.prev&&ex.prev.length) {
       prevHTML+='<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+' </div><div class="prev-row">';
       ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
-      if (ex.prevExtras) { var ff=EXTRA_FIELDS[ex.id]; if(ff) ff.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; }); }
+      if (ex.prevExtras) { var ff=getExtraFields(ex); if(ff) ff.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; }); }
       prevHTML+='</div>';
     }
     var extraHTML='';
-    var fields=EXTRA_FIELDS[ex.id];
+    var fields=getExtraFields(ex);
     if (fields) {
       extraHTML='<div class="extra-fields">';
       fields.forEach(function(f){ extraHTML+='<div class="extra-row"><span class="extra-label">'+f.label+'</span><input class="extra-input" type="text" inputmode="decimal" placeholder="—" value="'+(ex.extras[f.key]||'')+'" oninput="updateExtra('+ei+',\''+f.key+'\',this.value)"></div>'; });
@@ -359,7 +362,7 @@ function render() {
         h.exercises.forEach(function(ex){
           var chips=ex.sets.map(function(s){return '<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>';}).join('');
           var extraChips='';
-          if(ex.extras){var ff=EXTRA_FIELDS[ex.id];if(ff)ff.forEach(function(f){if(ex.extras[f.key])extraChips+='<span class="prev-chip">'+f.label+' '+ex.extras[f.key]+'</span>';});}
+          if(ex.extras){var ff=getExtraFields(ex);if(ff)ff.forEach(function(f){if(ex.extras[f.key])extraChips+='<span class="prev-chip">'+f.label+' '+ex.extras[f.key]+'</span>';});}
           hExHTML+='<div style="margin-top:6px"><div style="color:#aaa;font-size:12px">'+ex.name+'</div><div class="prev-row" style="margin-top:2px">'+chips+extraChips+'</div></div>';
         });
         var hCardioHTML='';
