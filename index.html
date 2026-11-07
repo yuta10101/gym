@@ -108,6 +108,15 @@ var DEFAULT_MENUS = {
     { id: 'ext',    name: 'レッグエクステンション' },
     { id: 'press',  name: 'レッグプレス' },
   ],
+  recovery: [
+    { id: 'press', name: 'レッグプレス' },
+    { id: 'arm_curl', name: 'アームカール' },
+    { id: 'pressdown', name: 'プレスダウン' },
+  ],
+  recoveryCardio: [
+    { id: 'recovery_bike_start', name: 'バイク（開始時・軽め）' },
+    { id: 'recovery_bike_end', name: 'バイク（終了時・軽め）' },
+  ],
   cardio: [
     { id: 'bike',      name: 'エアロバイク' },
     { id: 'treadmill', name: 'トレッドミル' },
@@ -123,6 +132,8 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 
 // 表示用ラベル（旧upper/lowerと新A/B両対応）
 function typeLabel(type) {
+  if (type === 'custom') return 'カスタム';
+  if (type === 'recovery') return '回復期';
   if (type === 'A') return 'DAY A';
   if (type === 'B') return 'DAY B';
   if (type === 'upper') return '上半身';
@@ -162,35 +173,127 @@ function formatDate(d) { if(!d)return''; var dt=new Date(d+'T00:00:00'); return 
 function formatTime(iso) { if(!iso)return''; var dt=new Date(iso); var h=dt.getHours(); var m=dt.getMinutes(); return (h<10?'0':'')+h+':'+(m<10?'0':'')+m; }
 function todayLabel() { return new Date().toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'}); }
 
-function findPrevExercise(hist, beforeIdx, type, exId) {
+function exerciseName(name) {
+  return (name||'').replace(/\s/g,'').replace(/^トライセプスプレスダウン$/, 'プレスダウン');
+}
+function sameExercise(a, b) {
+  return a.id===b.id || (exerciseName(a.name)!=='' && exerciseName(a.name)===exerciseName(b.name));
+}
+function sameCardio(a, b) {
+  function name(c) {
+    if (c.id==='bike' || /^recovery_bike_/.test(c.id)) return 'エアロバイク';
+    return exerciseName(c.name);
+  }
+  return a.id===b.id || (name(a)!=='' && name(a)===name(b));
+}
+function findPrevExercise(hist, beforeIdx, ex) {
   for (var i=beforeIdx;i>=0;i--) {
-    if (!sameGroup(hist[i].type, type)) continue;
-    var found=(hist[i].exercises||[]).filter(function(e){return e.id===exId;})[0];
-    if (found&&found.sets&&found.sets.length) return {entry:hist[i],ex:found};
+    var found=(hist[i].exercises||[]).find(function(e){return sameExercise(e,ex)&&e.sets&&e.sets.length;});
+    if (found) return {entry:hist[i],ex:found};
   }
   return null;
 }
-function findPrevCardio(hist, beforeIdx, cId) {
+function findPrevCardio(hist, beforeIdx, cardio) {
   for (var i=beforeIdx;i>=0;i--) {
-    if (!hist[i].cardio) continue;
-    var found=hist[i].cardio.filter(function(x){return x.id===cId;})[0];
+    var found=(hist[i].cardio||[]).slice().reverse().find(function(c){
+      return sameCardio(c,cardio) && [c.mins,c.load,c.dist].some(function(v){return v!==''&&v!==null&&v!==undefined;});
+    });
     if (found) return {entry:hist[i],c:found};
   }
   return null;
 }
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
+}
+function openCustom() {
+  var choices={exercises:[],cardio:[]};
+  function add(list, item, matches) {
+    if (!list.some(function(e){return matches(e,item);})) list.push({id:item.id,name:item.name});
+  }
+  ['A','B','recovery','custom'].forEach(function(type){
+    (state.data.menus[type]||[]).forEach(function(ex){add(choices.exercises,ex,sameExercise);});
+  });
+  ['cardio','recoveryCardio'].forEach(function(type){
+    (state.data.menus[type]||[]).forEach(function(c){add(choices.cardio,c,sameCardio);});
+  });
+  state.data.history.slice().reverse().forEach(function(h){
+    (h.exercises||[]).forEach(function(ex){add(choices.exercises,ex,sameExercise);});
+    (h.cardio||[]).forEach(function(c){add(choices.cardio,c,sameCardio);});
+  });
+  setState({screen:'custom',customChoices:choices,customSelected:{exercises:{},cardio:{}},customName:''});
+}
+function addCustomExercise() {
+  var name=(state.customName||'').trim();
+  if (!name) return;
+  var item={id:'custom_'+Date.now(),name:name};
+  var idx=state.customChoices.exercises.findIndex(function(e){return sameExercise(e,item);});
+  if(idx<0) {
+    idx=state.customChoices.exercises.length;
+    state.customChoices.exercises.push(item);
+    state.data.menus.custom.push(item);
+    saveData();
+  }
+  state.customSelected.exercises[idx]=true;
+  state.customName='';
+  render();
+}
+function startCustomSession() {
+  var selected={};
+  ['exercises','cardio'].forEach(function(key){
+    selected[key]=state.customChoices[key].filter(function(item,i){return state.customSelected[key][i];});
+  });
+  if (!selected.exercises.length&&!selected.cardio.length) return;
+  startSession('custom',selected);
+}
 
-function startSession(type) {
+// 回復期の目安は実績と分離し、通常メニューの記録だけを基準にする。
+function recoveryOptions() {
+  return state.data.recoveryOptions || {percent:50,sets:2,reps:12,mins:10};
+}
+function updateRecoveryOption(key, value) {
+  var limits={percent:[1,100],sets:[1,10],reps:[1,100],mins:[1,120]};
+  var n=Number(value), limit=limits[key];
+  if (!limit || !Number.isInteger(n) || n<limit[0] || n>limit[1]) return false;
+  state.data.recoveryOptions=Object.assign({},recoveryOptions());
+  state.data.recoveryOptions[key]=n;
+  saveData();
+  return true;
+}
+function normalWeight(ex) {
+  var hist=state.data.history;
+  for(var i=hist.length-1;i>=0;i--) {
+    if (['A','B','upper','lower'].indexOf(hist[i].type)<0) continue;
+    var found=(hist[i].exercises||[]).find(function(e){
+      return e.id===ex.id || e.name===ex.name ||
+        (ex.name==='プレスダウン' && /^(トライセプス)?プレスダウン$/.test(e.name));
+    });
+    if (!found) continue;
+    var set=(found.sets||[]).find(function(x){return Number(x.kg)>0;});
+    if(set) return Number(set.kg);
+  }
+  return null;
+}
+function cardioMenu(type) {
+  return state.data.menus[type==='recovery'?'recoveryCardio':'cardio'];
+}
+
+function startSession(type, selected) {
   var hist = state.data.history;
   var beforeIdx = hist.length-1;
-  var exercises = state.data.menus[type].map(function(ex) {
-    var found=findPrevExercise(hist,beforeIdx,type,ex.id);
+  var exercises = (selected?selected.exercises:state.data.menus[type]).map(function(ex) {
+    var found=findPrevExercise(hist,beforeIdx,ex);
     var extras={};
     if (getExtraFields(ex)) getExtraFields(ex).forEach(function(f){ extras[f.key]=found&&found.ex.extras?(found.ex.extras[f.key]||''):''; });
-    return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,sets:[{kg:'',reps:''}],extras:extras};
+    var options=recoveryOptions();
+    var base=type==='recovery'?normalWeight(ex):null;
+    var target=base===null?'通常重量の'+options.percent+'％':(Math.round(base*options.percent)/100)+'kg（通常 '+base+'kg の'+options.percent+'％）';
+    var hint=type==='recovery'?'目安：'+target+' × '+options.reps+'回 × '+options.sets+'セット':'';
+    var sets=Array.from({length:type==='recovery'?options.sets:1},function(){return {kg:'',reps:''};});
+    return {id:ex.id,name:ex.name,hint:hint,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,sets:sets,extras:extras};
   });
-  var cardio=state.data.menus.cardio.map(function(c){
-    var found=findPrevCardio(hist,beforeIdx,c.id);
-    return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevDate:found?found.entry.date:null,mins:'',load:'',dist:''};
+  var cardio=(selected?selected.cardio:cardioMenu(type)).map(function(c){
+    var found=findPrevCardio(hist,beforeIdx,c);
+    return {id:c.id,name:c.name,hint:type==='recovery'?'目安：軽めで '+recoveryOptions().mins+'分（実施した時間を入力）':'',prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,mins:'',load:'',dist:''};
   });
   setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:nowISO()},editingHistIdx:null});
 }
@@ -200,18 +303,18 @@ function editHistoryEntry(histIdx) {
   var type=entry.type;
   var hist=state.data.history;
   var beforeIdx=histIdx-1;
-  var exercises=state.data.menus[type].map(function(ex){
+  var exercises=(entry.exercises||[]).map(function(ex){
     var savedEx=(entry.exercises||[]).filter(function(e){return e.id===ex.id;})[0];
-    var found=findPrevExercise(hist,beforeIdx,type,ex.id);
-    var extras={};
+    var found=findPrevExercise(hist,beforeIdx,ex);
+    var extras=savedEx&&savedEx.extras?deepCopy(savedEx.extras):{};
     if (getExtraFields(ex)) getExtraFields(ex).forEach(function(f){ extras[f.key]=savedEx&&savedEx.extras?(savedEx.extras[f.key]||''):''; });
-    return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevDate:found?found.entry.date:null,
+    return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,
       sets:savedEx&&savedEx.sets&&savedEx.sets.length?deepCopy(savedEx.sets):[{kg:'',reps:''}],extras:extras};
   });
-  var cardio=state.data.menus.cardio.map(function(c){
+  var cardio=(entry.cardio||[]).map(function(c){
     var savedC=entry.cardio?entry.cardio.filter(function(x){return x.id===c.id;})[0]:null;
-    var found=findPrevCardio(hist,beforeIdx,c.id);
-    return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevDate:found?found.entry.date:null,
+    var found=findPrevCardio(hist,beforeIdx,c);
+    return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,
       mins:savedC?(savedC.mins||''):'',load:savedC?(savedC.load||''):'',dist:savedC?(savedC.dist||''):''};
   });
   setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:entry.startTime||null},editingHistIdx:histIdx});
@@ -223,7 +326,7 @@ function finishSession() {
     date:existing?existing.date:today(),
     type:state.session.type,
     startTime:state.session.startTime||(existing?existing.startTime:null),
-    endTime:nowISO(),
+    endTime:existing?existing.endTime:nowISO(),
     exercises:state.session.exercises.map(function(ex){
       return {id:ex.id,name:ex.name,sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}),extras:ex.extras};
     }),
@@ -251,7 +354,7 @@ function buildSessionHTML(session,isEditing) {
   session.exercises.forEach(function(ex,ei){
     var prevHTML='';
     if (ex.prev&&ex.prev.length) {
-      prevHTML+='<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+' </div><div class="prev-row">';
+      prevHTML+='<div class="prev-label">前回 '+(ex.prevDate?formatDate(ex.prevDate):'')+(ex.prevType?' · '+ex.prevType:'')+' </div><div class="prev-row">';
       ex.prev.forEach(function(s){ prevHTML+='<span class="prev-chip">'+s.kg+'kg × '+s.reps+'</span>'; });
       if (ex.prevExtras) { var ff=getExtraFields(ex); if(ff) ff.forEach(function(f){ if(ex.prevExtras[f.key]) prevHTML+='<span class="prev-chip">'+f.label+' '+ex.prevExtras[f.key]+'</span>'; }); }
       prevHTML+='</div>';
@@ -272,7 +375,7 @@ function buildSessionHTML(session,isEditing) {
         (ex.sets.length>1?'<button class="del-btn" onclick="removeSet('+ei+','+si+')">−</button>':'')+
         '</div>';
     });
-    exHTML+='<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+prevHTML+extraHTML+setsHTML+'<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
+    exHTML+='<div class="ex-card"><div class="ex-name">'+ex.name+'</div>'+(ex.hint?'<div class="cardio-prev">'+ex.hint+'（実績を入力）</div>':'')+prevHTML+extraHTML+setsHTML+'<button class="add-set-btn" onclick="addSet('+ei+')">+ セット追加</button></div>';
   });
 
   var cardioHTML='';
@@ -281,8 +384,9 @@ function buildSessionHTML(session,isEditing) {
     if(c.prevMins) prevInfo.push(c.prevMins+'分');
     if(c.prevLoad) prevInfo.push('負荷'+c.prevLoad);
     if(c.prevDist) prevInfo.push(c.prevDist+'km');
-    var prevStr=prevInfo.length?'前回'+(c.prevDate?' '+formatDate(c.prevDate):'')+' '+prevInfo.join(' · '):'';
+    var prevStr=prevInfo.length?'前回'+(c.prevDate?' '+formatDate(c.prevDate):'')+(c.prevType?' · '+c.prevType:'')+' '+prevInfo.join(' · '):'';
     cardioHTML+='<div class="cardio-card"><div class="cardio-name">'+c.name+'</div>'+
+      (c.hint?'<div class="cardio-prev">'+c.hint+'</div>':'')+
       (prevStr?'<div class="cardio-prev">'+prevStr+'</div>':'')+
       '<div class="cardio-grid">'+
       '<div class="cardio-field"><div class="cardio-field-label">TIME</div><div class="cardio-field-row"><input class="min-input" type="number" inputmode="numeric" placeholder="0" value="'+c.mins+'" oninput="updateCardio('+ci+',\'mins\',this.value)"><span class="min-label">分</span></div></div>'+
@@ -297,7 +401,7 @@ function buildSessionHTML(session,isEditing) {
   var timeInfo=session.startTime?'開始 '+formatTime(session.startTime):'';
 
   return '<div class="page">'+
-    '<header><span class="logo" style="font-size:15px">DAY '+session.type+badge+'</span>'+
+    '<header><span class="logo" style="font-size:15px">'+typeLabel(session.type)+badge+'</span>'+
     '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
     (timeInfo?'<div class="session-time-bar">'+timeInfo+'</div>':'')+
     '<div class="session-body">'+exHTML+
@@ -338,7 +442,29 @@ function render() {
       (lastSug?'<div class="last-info">前回 '+formatDate(lastSug.date)+'</div>':'')+
       '<button class="primary-btn" onclick="startSession(\''+suggested+'\')">START DAY '+suggested+'</button></div>'+
       '<button class="secondary-btn" onclick="startSession(\''+other+'\')">DAY '+other+' にする</button>'+
+      '<button class="secondary-btn" style="margin-top:12px" onclick="openCustom()">カスタム（種目を選ぶ）</button>'+
+      '<button class="secondary-btn" style="margin-top:12px" onclick="setState({screen:\'recovery\'})">回復期メニュー</button>'+
       '</div>';
+    return;
+  }
+
+  if (screen==='custom') {
+    var choicesHTML='';
+    ['exercises','cardio'].forEach(function(key){
+      choicesHTML+='<div class="section-title">'+(key==='exercises'?'筋トレ':'有酸素')+'</div>';
+      state.customChoices[key].forEach(function(item,i){
+        choicesHTML+='<label class="setting-row" style="padding:8px 0"><input type="checkbox" '+(state.customSelected[key][i]?'checked':'')+' onchange="state.customSelected[\''+key+'\']['+i+']=this.checked"><span class="setting-name">'+escapeHTML(item.name)+'</span></label>';
+      });
+    });
+    app.innerHTML='<div class="page"><header><span class="logo">カスタム</span><button class="ghost-btn" onclick="setState({screen:\'home\'})">← 戻る</button></header><p class="cardio-prev">今日行う種目を選んでください。有酸素だけでも記録できます。前回実績はメニューを問わず表示します。</p><div class="scroll-body">'+choicesHTML+'<form onsubmit="event.preventDefault();addCustomExercise()" class="set-row"><input class="rename-input" aria-label="新しい種目名" placeholder="新しい筋トレ種目" value="'+escapeHTML(state.customName||'')+'" oninput="state.customName=this.value"><button class="add-set-btn" type="submit">追加して選択</button></form><button class="primary-btn" onclick="startCustomSession()">選んだ種目で開始</button><p class="cardio-prev">1種目以上選んでください。重量・回数・セット数は開始後に入力できます。</p></div></div>';
+    return;
+  }
+
+  if (screen==='recovery') {
+    var options=recoveryOptions();
+    var fields=[['percent','通常重量に対する割合（％）',1,100],['sets','セット数',1,10],['reps','回数',1,100],['mins','バイク時間（開始・終了それぞれ／分）',1,120]];
+    var inputs=fields.map(function(f){return '<label style="display:block;margin-bottom:12px">'+f[1]+' <input class="num-input" type="number" min="'+f[2]+'" max="'+f[3]+'" step="1" value="'+options[f[0]]+'" onchange="this.setCustomValidity(updateRecoveryOption(\''+f[0]+'\',this.value)?\'\':\'範囲内の整数を入力してください\');this.reportValidity()" required></label>';}).join('');
+    app.innerHTML='<div class="page"><header><span class="logo">回復期</span><button class="ghost-btn" onclick="setState({screen:\'home\'})">← 戻る</button></header><div class="card"><p>バイク（開始）→ 筋トレ → バイク（終了）</p><p style="font-size:13px;color:#aaa">負荷は入力用の目安です。運動再開の可否や適切な負荷は医療者と確認してください。痛みが出る場合は中止してください。</p></div><form onsubmit="event.preventDefault();startSession(\'recovery\')">'+inputs+'<p class="cardio-prev">重量は通常A/Bの直近実績を基準に表示します。記録がない種目は割合のみ表示します。実施した重量・回数・時間を記録してください。</p><button class="primary-btn" type="submit">回復期を開始</button></form></div>';
     return;
   }
 
@@ -388,7 +514,7 @@ function render() {
 
   if (screen==='settings') {
     var editingEx=state.editingEx,addMode=state.addMode,addText=state.addText,editName=state.editName;
-    var allTypes=[{key:'A',lbl:'DAY A'},{key:'B',lbl:'DAY B'},{key:'cardio',lbl:'有酸素'}];
+    var allTypes=[{key:'A',lbl:'DAY A'},{key:'B',lbl:'DAY B'},{key:'cardio',lbl:'有酸素'},{key:'custom',lbl:'カスタムで追加した筋トレ'},{key:'recovery',lbl:'回復期の筋トレ'},{key:'recoveryCardio',lbl:'回復期の有酸素'}];
     var sectHTML='';
     allTypes.forEach(function(t){
       var rows='';
@@ -424,6 +550,9 @@ window.addEventListener('DOMContentLoaded', function() {
     if (!data.menus.cardio) data.menus.cardio=deepCopy(DEFAULT_MENUS.cardio);
     if (!data.menus.A) data.menus.A=deepCopy(DEFAULT_MENUS.A);
     if (!data.menus.B) data.menus.B=deepCopy(DEFAULT_MENUS.B);
+    if (!data.menus.recovery) data.menus.recovery=deepCopy(DEFAULT_MENUS.recovery);
+    if (!data.menus.recoveryCardio) data.menus.recoveryCardio=deepCopy(DEFAULT_MENUS.recoveryCardio);
+    if (!data.menus.custom) data.menus.custom=[];
     state.data=data;
     saveData();
     render();
