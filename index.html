@@ -50,7 +50,7 @@
   .min-input { background: #222; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 16px; font-weight: 700; padding: 8px 6px; width: 100%; text-align: center; outline: none; }
   .min-label { color: #555; font-size: 11px; white-space: nowrap; }
   .session-time-bar { color: #666; font-size: 12px; margin-bottom: 12px; }
-  .session-body { overflow-y: auto; padding-bottom: 100px; }
+  .session-body { overflow-y: auto; padding-bottom: 170px; }
   .bottom-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; padding: 12px 16px 32px; background: linear-gradient(transparent, #111 40%); }
   .finish-btn { width: 100%; background: #e8ff47; color: #111; border: none; border-radius: 12px; padding: 16px 0; font-weight: 800; font-size: 17px; cursor: pointer; }
   .done-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 24px; }
@@ -311,22 +311,40 @@ function editHistoryEntry(histIdx) {
     return {id:ex.id,name:ex.name,prev:found?found.ex.sets:null,prevExtras:found?found.ex.extras:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,
       sets:savedEx&&savedEx.sets&&savedEx.sets.length?deepCopy(savedEx.sets):[{kg:'',reps:''}],extras:extras};
   });
-  var cardio=(entry.cardio||[]).map(function(c){
-    var savedC=entry.cardio?entry.cardio.filter(function(x){return x.id===c.id;})[0]:null;
+  // 保存時に省かれた未入力の有酸素も、編集画面では再び入力できるようにする。
+  // 保存済みの行はメニュー変更後も保持し、開始・終了のバイクは別々に扱う。
+  var cardioChoices=deepCopy(entry.cardio||[]);
+  (cardioMenu(type)||[]).forEach(function(c){
+    if (!cardioChoices.some(function(saved){return saved.id===c.id;})) {
+      cardioChoices.push({id:c.id,name:c.name});
+    }
+  });
+  var cardio=cardioChoices.map(function(c){
     var found=findPrevCardio(hist,beforeIdx,c);
     return {id:c.id,name:c.name,prevMins:found?found.c.mins:null,prevLoad:found?found.c.load:null,prevDist:found?found.c.dist:null,prevType:found?typeLabel(found.entry.type):null,prevDate:found?found.entry.date:null,
-      mins:savedC?(savedC.mins||''):'',load:savedC?(savedC.load||''):'',dist:savedC?(savedC.dist||''):''};
+      mins:c.mins==null?'':c.mins,load:c.load==null?'':c.load,dist:c.dist==null?'':c.dist};
   });
-  setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:entry.startTime||null},editingHistIdx:histIdx});
+  setState({screen:'session',session:{type:type,exercises:exercises,cardio:cardio,startTime:entry.startTime||null,endTime:entry.endTime||null},editingHistIdx:histIdx});
 }
 
-function finishSession() {
+function updateEndTime(value) {
+  if (!value) return;
+  var entry=state.data.history[state.editingHistIdx];
+  var date=entry.endTime?new Date(entry.endTime):new Date(entry.date+'T12:00:00');
+  var parts=value.split(':');
+  date.setHours(Number(parts[0]),Number(parts[1]),0,0);
+  state.session.endTime=date.toISOString();
+}
+
+function finishSession(finalize) {
+  var temporary=finalize===false;
   var existing=state.editingHistIdx!==null?state.data.history[state.editingHistIdx]:null;
   var entry={
     date:existing?existing.date:today(),
     type:state.session.type,
     startTime:state.session.startTime||(existing?existing.startTime:null),
-    endTime:existing?existing.endTime:nowISO(),
+    endTime:temporary?null:existing&&!existing.inProgress?(state.session.endTime||existing.endTime):nowISO(),
+    inProgress:temporary,
     exercises:state.session.exercises.map(function(ex){
       return {id:ex.id,name:ex.name,sets:ex.sets.filter(function(s){return s.kg!==''||s.reps!=='';}),extras:ex.extras};
     }),
@@ -337,7 +355,7 @@ function finishSession() {
   if (state.editingHistIdx!==null) { state.data.history[state.editingHistIdx]=entry; }
   else { state.data.history.push(entry); }
   saveData();
-  setState({screen:state.editingHistIdx!==null?'history':'done',session:null,editingHistIdx:null});
+  setState({screen:temporary||state.editingHistIdx!==null?'history':'done',session:null,editingHistIdx:null});
 }
 
 function updateSet(ei,si,field,val){ state.session.exercises[ei].sets[si][field]=val; }
@@ -396,19 +414,22 @@ function buildSessionHTML(session,isEditing) {
   });
 
   var cancelAction=isEditing?"setState({screen:'history',session:null,editingHistIdx:null})":"setState({screen:'home',session:null})";
-  var finishLabel=isEditing?'修正を保存':'記録して終了';
+  var active=!isEditing || state.data.history[state.editingHistIdx].inProgress;
+  var finishLabel=active?'記録して終了':'修正を保存';
+  var temporaryButton=active?'<button class="secondary-btn" style="margin-bottom:8px" onclick="finishSession(false)">一時保存して履歴を見る</button>':'';
   var badge=isEditing?' <span class="editing-badge">編集中</span>':'';
   var timeInfo=session.startTime?'開始 '+formatTime(session.startTime):'';
+  var endTimeInput=isEditing&&!active?'<label class="session-time-bar">終了時刻 <input class="extra-input" type="time" value="'+formatTime(session.endTime)+'" onchange="updateEndTime(this.value)"></label>':'';
 
   return '<div class="page">'+
     '<header><span class="logo" style="font-size:15px">'+typeLabel(session.type)+badge+'</span>'+
     '<button class="ghost-btn" onclick="'+cancelAction+'">✕ キャンセル</button></header>'+
     (timeInfo?'<div class="session-time-bar">'+timeInfo+'</div>':'')+
-    '<div class="session-body">'+exHTML+
+    endTimeInput+'<div class="session-body">'+exHTML+
     '<hr class="divider">'+
     '<div class="cardio-section"><div class="cardio-label">有酸素</div>'+cardioHTML+'</div>'+
     '</div>'+
-    '<div class="bottom-bar"><button class="finish-btn" onclick="finishSession()">'+finishLabel+'</button></div>'+
+    '<div class="bottom-bar">'+temporaryButton+'<button class="finish-btn" onclick="finishSession()">'+finishLabel+'</button></div>'+
     '</div>';
 }
 
@@ -430,13 +451,17 @@ function render() {
   if (screen==='home') {
     var other=suggested==='A'?'B':'A';
     var lastSug=suggested==='A'?lastA:lastB;
+    var resumeHTML='';
+    hist.forEach(function(h,idx){
+      if(h.inProgress) resumeHTML+='<div class="card"><div class="suggest-label">一時保存中 · '+escapeHTML(h.date)+' · '+typeLabel(h.type)+'</div><button class="primary-btn" onclick="editHistoryEntry('+idx+')">トレーニングを再開</button></div>';
+    });
     app.innerHTML='<div class="page">'+
       '<header><span class="logo">GYM</span>'+
       '<div class="header-btns">'+
       '<button class="icon-btn" onclick="setState({screen:\'history\'})">📋</button>'+
       '<button class="icon-btn" onclick="setState({screen:\'settings\'})">⚙️</button>'+
       '</div></header>'+
-      '<div class="date-row">'+todayLabel()+'</div>'+
+      '<div class="date-row">'+todayLabel()+'</div>'+resumeHTML+
       '<div class="card"><div class="suggest-label">今日のおすすめ</div>'+
       '<div class="day-big">DAY '+suggested+'</div>'+
       (lastSug?'<div class="last-info">前回 '+formatDate(lastSug.date)+'</div>':'')+
@@ -500,7 +525,7 @@ function render() {
         var timeHTML='';
         if(h.startTime||h.endTime){var parts=[];if(h.startTime)parts.push('開始 '+formatTime(h.startTime));if(h.endTime)parts.push('終了 '+formatTime(h.endTime));timeHTML='<div class="hist-time">'+parts.join(' · ')+'</div>';}
         cardsHTML+='<div class="hist-card">'+
-          '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+typeLabel(h.type)+'</span></div>'+
+          '<div class="hist-header"><span class="hist-date">'+h.date+'</span><span class="hist-type">'+typeLabel(h.type)+(h.inProgress?' · 一時保存中':'')+'</span></div>'+
           timeHTML+hExHTML+hCardioHTML+
           '<button class="edit-btn" onclick="editHistoryEntry('+realIdx+')">✏️ 編集</button>'+
           '</div>';
@@ -564,3 +589,4 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>
+
